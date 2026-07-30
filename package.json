@@ -1,6 +1,6 @@
 {
   "name": "gistline",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Structure-aware compression for large tool output. Keeps test failures, JSON shape, and your stack frames instead of blindly truncating. Zero dependencies.",
   "type": "module",
   "license": "MIT",
@@ -18,11 +18,13 @@
     ".": "./index.mjs"
   },
   "bin": {
-    "gistline": "cli.mjs"
+    "gistline": "cli.mjs",
+    "gistline-mcp": "mcp.mjs"
   },
   "files": [
     "index.mjs",
     "store.mjs",
+    "mcp.mjs",
     "cli.mjs",
     "README.md",
     "LICENSE"

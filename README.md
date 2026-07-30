@@ -5,125 +5,147 @@
 [![license](https://img.shields.io/npm/l/gistline)](./LICENSE)
 [![CI](https://github.com/majidbilal/gistline/actions/workflows/ci.yml/badge.svg)](https://github.com/majidbilal/gistline/actions/workflows/ci.yml)
 
-**Keep the gist of large output.** Structure-aware compression for AI agents and CI logs.
-Zero dependencies, pure functions, Node ≥18.
-
-```bash
-npx gistline --help        # no install needed
-npm i gistline             # as a library
-npm i -g gistline          # as a command
-```
-
-**Measured:** a real 605-test suite, `96,443 → 2,284` characters. **98% smaller, failure intact.**
-
-## The problem
-
-Truncation keeps the wrong part. A 40,000-line test run ends with a summary and contains one
-failure — keep the first 4,000 characters and you get neither. Large tool output is the main way an
-AI agent's context gets exhausted, crowding out the task itself.
-
-## The idea
-
-Compression should understand what it is compressing:
-
-| Output | What gistline keeps | What it drops |
-|---|---|---|
-| **test runs** | failures + their diagnostic block + the summary | passing lines, TAP subtest announcements |
-| **diffs** | file headers + changed lines | unchanged context |
-| **JSON** | parseable *shape*: keys, types, array lengths | sampled array items, long string tails |
-| **stack traces** | the message + your frames | `node:internal` and `node_modules` frames |
-| **logs / listings** | salient lines by **content, not position** | routine progress noise |
-
-Anything unrecognised falls back to a head-and-tail keep — the cause is usually at the start and the
-result at the end.
-
-## Retrieval is real, not reassuring
-
-Most compressors tell you "nothing was lost". gistline can prove it. Pass a store and the original is
-kept, content-addressed, and the note carries an id:
-
-```bash
-npm test 2>&1 | npx gistline --store --label "npm test"
-# [npm test output compressed: 102654 → 133 chars.
-#  Full output retained as id dd0fd19eb38f9210 — retrieve, slice, or grep it for any dropped detail.]
-
-npx gistline retrieve dd0fd19eb38f9210
-npx gistline slice   dd0fd19eb38f9210 --from-line 4300 --lines 40
-npx gistline grep    dd0fd19eb38f9210 "FATAL"
-npx gistline store-stats
-```
-
-`slice` and `grep` matter more than `retrieve` in practice: after reading a summary you usually want
-*one specific region*, not the whole 100k characters back.
-
-Without a store, the note promises only what it can deliver — it never claims a retrieval it cannot
-honour. A store that fails to write degrades to that same honest note rather than breaking the run.
-
-## Token budgets
-
-Characters are a convenient proxy but they misprice code, where punctuation and short identifiers each
-cost a token. `--max-tokens` budgets in estimated tokens instead:
-
-```bash
-npx gistline --max-tokens 500 < build.log
-```
-
-`estimateTokens()` costs words by length and symbols individually, so it tracks code far better than
-`chars / 4`. It is an **estimate** — a real BPE tokenizer would mean shipping a vocabulary file and a
-dependency. Good enough to budget with; not for billing.
-
-## CLI
+**Your AI coding assistant keeps losing the plot after running tests. This fixes that.**
 
 ```bash
 npm test 2>&1 | npx gistline
-npx gistline --budget 2000 --label build < build.log
-npx gistline --kind test --stats < run.log
-npx gistline --json < payload.json
 ```
 
-| Option | Meaning |
-|---|---|
-| `--budget <chars>` | character budget (default 4000) |
-| `--kind <kind>` | force `test` \| `diff` \| `json` \| `stacktrace` \| `listing` \| `log` |
-| `--label <name>` | what produced the output (appears in the note) |
-| `--file <path>` | read a file instead of stdin |
-| `--stats` | one-line summary to stderr |
-| `--json` | emit the full result object |
+That's it. No install, no config.
 
-## Library
+---
+
+## The problem, in one example
+
+You ask Claude Code or Cursor to fix a failing test. It runs `npm test`. The output is 40,000 lines.
+
+The assistant can only "see" so much text at once, so it reads the beginning and gives up on the
+rest. The beginning is `TAP version 13` and a few hundred tests that **passed**. The one line that
+actually says what broke is somewhere in the middle — and it never gets read.
+
+So the assistant guesses. You get a confident fix for the wrong problem.
+
+## What gistline does
+
+It shrinks the output *before* your assistant reads it, and it's smart about **what to keep**:
+
+- Test runs → keeps the **failures** and the final score, throws away the passing lines
+- Errors → keeps **your** code's line numbers, throws away the framework noise
+- JSON → keeps the **shape** (what fields exist), shortens the values
+- Logs → keeps the lines that mention errors, wherever they are in the file
+
+Real example, from a project with 605 tests:
+
+```
+96,443 characters  →  2,284 characters       (98% smaller)
+```
+
+…and the failure, the error message, and the file-and-line were all still there.
+
+## Use it with your AI coding assistant
+
+**The easiest way:** paste this into your project's `CLAUDE.md`, `AGENTS.md`, or
+`.cursor/rules/gistline.mdc`. Your assistant will then do it automatically.
+
+```markdown
+## Reading command output
+
+When a command produces a lot of output (tests, builds, installs, logs), pipe it through
+gistline instead of reading it raw:
+
+    npm test 2>&1 | npx gistline --store --label "npm test"
+
+gistline keeps the failures and the summary and drops the noise. It prints an id; if you
+need a detail it dropped, fetch it instead of re-running the command:
+
+    npx gistline grep <id> "TypeError"
+    npx gistline slice <id> --from-line 4300 --lines 40
+```
+
+That's the whole integration. It works with **Claude Code, Cursor, Codex, Copilot CLI, Aider** —
+anything that reads a project instruction file and can run a shell command.
+
+### Or connect it as an MCP server
+
+If your tool supports MCP (Claude Code, Claude Desktop, Cursor, Codex), gistline can be a tool the
+assistant calls directly — no shell, no piping:
+
+```json
+{
+  "mcpServers": {
+    "gistline": { "command": "npx", "args": ["-y", "-p", "gistline", "gistline-mcp"] }
+  }
+}
+```
+
+That gives the assistant four tools: `compress`, and `retrieve` / `slice` / `grep` for pulling back
+anything compression dropped. **It's completely stateless** — nothing is held between calls, so it's
+safe to restart at any time, and an id stays valid because it's a hash of the content rather than a
+session handle.
+
+## Nothing is lost
+
+Add `--store` and gistline keeps the full original on disk. It prints an id, and you can pull back
+exactly the part you want:
+
+```bash
+npm test 2>&1 | npx gistline --store
+# [npm test output compressed: 96443 → 2284 chars.
+#  Full output retained as id dd0fd19eb38f9210 — retrieve, slice, or grep it.]
+
+npx gistline grep    dd0fd19eb38f9210 "FATAL"
+npx gistline slice   dd0fd19eb38f9210 --from-line 4300 --lines 40
+npx gistline retrieve dd0fd19eb38f9210          # the whole thing
+```
+
+Asking for *one region* is usually what you want — and it's far cheaper than re-running a slow test
+suite just to see a line you missed.
+
+## All the options
+
+```bash
+npx gistline --help
+```
+
+| Option | What it does |
+|---|---|
+| `--budget 4000` | how many characters to keep (default 4000) |
+| `--max-tokens 1000` | budget in tokens instead of characters |
+| `--label "npm test"` | name the output, so the note tells you where it came from |
+| `--store` | keep the original so you can retrieve it later |
+| `--kind test` | force a strategy instead of auto-detecting |
+| `--file build.log` | read a file instead of piped input |
+| `--stats` | print how much was saved |
+| `--json` | machine-readable output |
+
+## Using it in code
 
 ```js
-import { gist, makeGistStats, formatGistStats } from "gistline";
+import { gist } from "gistline";
 
-const res = gist(hugeTestLog, { budget: 4000, label: "npm test" });
-res.text;            // the compressed output, with a leading note
-res.ratio;           // 0.024
-res.kind;            // "test"
-res.originalChars;   // 96443
-res.compressedChars; // 2284
-
-// Prove it is engaging, rather than assuming
-const stats = makeGistStats();
-stats.record(res);
-formatGistStats(stats.snapshot());
-// "gistline: 1/1 outputs compressed, 94,159 chars saved (98% smaller)"
+const result = gist(hugeTestLog, { budget: 4000, label: "npm test" });
+result.text;   // the shortened output, with a note at the top
+result.ratio;  // 0.024
 ```
 
-Individual strategies are exported too (`compressTest`, `compressDiff`, `compressJson`,
-`compressStacktrace`, `compressLog`, `headTail`, `detectKind`) if you want to compose your own.
+Individual strategies (`compressTest`, `compressDiff`, `compressJson`, `compressStacktrace`,
+`compressLog`) are exported too, if you want to build something on top.
 
-## Measured
+## What it won't do
 
-Run against a real 512-test Node suite: **96,443 chars → 2,284 (98% smaller)**, with the failure
-diagnostics and the `# pass / # fail` summary intact.
+It's honest about its limits, because a tool you can't trust is worse than no tool:
 
-## Design rules
+- It **shortens**, it doesn't summarise. There's no AI inside — it's pattern matching, which means
+  it's fast, free, and gives the same answer every time.
+- It can't know which line *you* care about. It keeps failures and errors; if you need something
+  else, that's what `--store` and `grep` are for.
+- Token counts are an **estimate**. Close enough to budget with, not for billing.
 
-- **Pure.** No filesystem, no network, no clock, no model call. Same input, same output.
-- **Never exceeds the budget.** Every strategy is clamped.
-- **Never silently lossy.** Each result states what was dropped and that retrieval is possible.
-- **Zero dependencies.** Nothing to audit, nothing to break.
+## Why you can trust it in a build
+
+No dependencies at all — nothing to install, nothing that can break or go stale. Runs anywhere Node
+18+ runs. Tested on Linux, macOS and Windows across Node 18, 20 and 22.
 
 ## License
 
-MIT
+MIT © Majid Bilal
