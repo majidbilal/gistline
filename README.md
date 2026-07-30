@@ -139,7 +139,13 @@ It's honest about its limits, because a tool you can't trust is worse than no to
   it's fast, free, and gives the same answer every time.
 - It can't know which line *you* care about. It keeps failures and errors; if you need something
   else, that's what `--store` and `grep` are for.
+- **Ordinary text with no errors in it** — plain prose, CSV, HTML — has nothing to latch onto, so it
+  falls back to keeping the start and the end. That's the weakest case today, and it's the next thing
+  being improved.
 - Token counts are an **estimate**. Close enough to budget with, not for billing.
+
+**See [ROADMAP.md](./ROADMAP.md)** for what's coming next, and what deliberately isn't.
+
 
 ## Why you can trust it in a build
 
