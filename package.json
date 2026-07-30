@@ -1,0 +1,47 @@
+{
+  "name": "gistline",
+  "version": "0.1.1",
+  "description": "Structure-aware compression for large tool output. Keeps test failures, JSON shape, and your stack frames instead of blindly truncating. Zero dependencies.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Majid Bilal <majidbilaly@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/majidbilal/gistline.git"
+  },
+  "homepage": "https://github.com/majidbilal/gistline#readme",
+  "bugs": {
+    "url": "https://github.com/majidbilal/gistline/issues"
+  },
+  "main": "./index.mjs",
+  "exports": {
+    ".": "./index.mjs"
+  },
+  "bin": {
+    "gistline": "cli.mjs"
+  },
+  "files": [
+    "index.mjs",
+    "store.mjs",
+    "cli.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "compression",
+    "context",
+    "llm",
+    "ai-agents",
+    "logs",
+    "test-output",
+    "truncate",
+    "summarize",
+    "cli"
+  ],
+  "scripts": {
+    "test": "node --test"
+  }
+}
