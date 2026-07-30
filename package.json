@@ -1,6 +1,6 @@
 {
   "name": "gistline",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Structure-aware compression for large tool output. Keeps test failures, JSON shape, and your stack frames instead of blindly truncating. Zero dependencies.",
   "type": "module",
   "license": "MIT",

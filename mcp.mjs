@@ -269,5 +269,15 @@ function send(obj) {
   process.stdout.write(`${JSON.stringify(obj)}\n`);
 }
 
-// stdin closing is the host detaching: exit cleanly rather than lingering.
-process.stdin.on("end", () => process.exit(0));
+// stdin closing means the host has detached. Deliberately NO `process.exit()` here.
+//
+// `process.exit()` does not wait for stdout to drain, so anything still buffered is discarded. With a
+// large response that truncates the JSON mid-message and the client gets unparseable output. CI caught
+// this on macOS with Node 18 and 20; Linux and Windows pipe buffers happened to absorb the write,
+// which is exactly why a single-platform test suite would have missed it.
+//
+// With stdin ended and no work pending, Node exits on its own once stdout has flushed — which is both
+// simpler and correct.
+process.stdin.on("end", () => {
+  process.exitCode = 0;
+});

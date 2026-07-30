@@ -225,3 +225,42 @@ test("nothing is written to stderr during normal use", async () => {
   const { stderr } = await rpc([req(1, "tools/list"), call(2, "compress", { text: "x", budget: 4000 })]);
   assert.equal(stderr.trim(), "", "stderr noise corrupts some hosts' logs");
 });
+
+test("a very large response arrives complete, not truncated", async () => {
+  // Regression: the server called process.exit(0) when stdin ended, which does NOT wait for stdout to
+  // drain — so a response bigger than the pipe buffer was cut off mid-JSON and the client got
+  // unparseable output. It surfaced only on macOS with Node 18/20; Linux and Windows buffers absorbed
+  // the write, which is why cross-platform CI was what caught it.
+  //
+  // retrieve() returns the FULL original, so it is the easiest way to force a large reply.
+  const dir = mkdtempSync(join(tmpdir(), "gl-mcp-big-"));
+  try {
+    const huge = Array.from({ length: 20000 }, (_, i) => `line ${i} with enough text to push well past any pipe buffer`).join("\n");
+    assert.ok(huge.length > 1_000_000, "the fixture must exceed typical pipe buffers");
+
+    const a = await rpc([call(1, "compress", { text: huge, budget: 500, store: true })], { GISTLINE_STORE: dir });
+    const id = /id=([0-9a-f]+)/.exec(a.replies[0].result.content[0].text)?.[1];
+    assert.ok(id, "compress(store) must return an id");
+
+    // The reply here is over a megabyte. If stdout is not flushed before exit, this throws on parse.
+    const b = await rpc([call(1, "retrieve", { id })], { GISTLINE_STORE: dir });
+    assert.equal(b.replies.length, 1, "exactly one complete reply");
+    const returned = b.replies[0].result.content[0].text;
+    assert.equal(returned.length, huge.length, `truncated: got ${returned.length} of ${huge.length} chars`);
+    assert.equal(returned, huge, "the original must come back byte-identical");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("many replies in one session all arrive complete", async () => {
+  // The same flush hazard, in a different shape: several sizeable replies queued before stdin ends.
+  const big = Array.from({ length: 3000 }, (_, i) => `padding line ${i}`).join("\n");
+  const { replies } = await rpc([
+    call(1, "compress", { text: big, budget: 200000 }),
+    call(2, "compress", { text: big, budget: 200000 }),
+    call(3, "compress", { text: big, budget: 200000 }),
+  ]);
+  assert.deepEqual(replies.map((r) => r.id), [1, 2, 3], "no reply may be lost or truncated");
+  for (const r of replies) assert.ok(r.result.content[0].text.includes("padding line 2999"));
+});
