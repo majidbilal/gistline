@@ -3,3 +3,16 @@ node_modules/
 *.log
 .gistline-store/
 .tightdiff-baseline.json
+
+# Internal planning documents. Never committed and never published.
+#
+# `package.json` already lists `files` explicitly, so these were never going to reach npm — but they WOULD have been
+# committed to git, which is the same disclosure by a different route. Planning notes discuss competitors, unfinished
+# reasoning and decisions still being argued; none of that belongs in a public repository.
+#
+# Public-facing planning lives in ROADMAP.md, which is deliberately written to be read by anyone.
+PLAN-*.md
+NOTES-*.md
+RESEARCH-*.md
+/internal/
+"gistline-*.tgz"  

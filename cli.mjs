@@ -21,6 +21,84 @@ const has = (name) => argv.includes(`--${name}`);
 
 // --- retrieval subcommands: what makes the compression note honest -------------------------------
 const sub = argv[0];
+
+/**
+ * Registration subcommands.
+ *
+ * Placed before the retrieval block because `install` is the first command most people run, and because a subcommand that
+ * writes files should be impossible to reach by accident from a piping path.
+ */
+if (["install", "uninstall", "status", "platforms"].includes(sub)) {
+  const { PLATFORMS, findPlatform, installPlatform, uninstallPlatform, detect, status } = await import("./install.mjs");
+  const project = argv.includes("--project");
+  const dryRun = argv.includes("--dry-run");
+  const named = flag("platform", null);
+
+  if (sub === "platforms") {
+    console.log(`gistline supports ${PLATFORMS.length} assistants.\n`);
+    const width = Math.max(...PLATFORMS.map((p) => p.label.length));
+    for (const p of PLATFORMS) {
+      const scopes = [p.user ? "user" : null, p.project ? "project" : null].filter(Boolean).join(", ");
+      console.log(`  ${p.label.padEnd(width)}  --platform ${p.id.padEnd(12)} ${p.kind.padEnd(12)} (${scopes})`);
+    }
+    console.log("\n  gistline install                      register with whatever is detected");
+    console.log("  gistline install --platform cursor    a specific assistant");
+    console.log("  gistline install --project            write into this repository instead of your profile");
+    process.exit(0);
+  }
+
+  if (sub === "status") {
+    const rows = status();
+    if (!rows.length) {
+      console.log("gistline is not registered with any assistant. Run: gistline install");
+      process.exit(0);
+    }
+    console.log(`gistline is registered in ${rows.length} file(s):\n`);
+    for (const r of rows) {
+      console.log(`  ${r.path}`);
+      console.log(`    ${r.scope}-scoped ${r.kind}, read by: ${r.platforms.join(", ")}`);
+    }
+    process.exit(0);
+  }
+
+  // Which platforms to act on: the one named, or everything detected.
+  let targets;
+  if (named) {
+    try { targets = [findPlatform(named)]; }
+    catch (e) { console.error(`gistline: ${e.message}`); process.exit(2); }
+  } else {
+    targets = detect();
+    if (!targets.length) {
+      console.error("gistline: no AI assistant detected. Name one explicitly:\n  gistline install --platform claude");
+      console.error("  gistline platforms          to see all supported assistants");
+      process.exit(2);
+    }
+  }
+
+  const act = sub === "install" ? installPlatform : uninstallPlatform;
+  let done = 0;
+
+  for (const p of targets) {
+    // Try the requested scope, and fall back to the other one when a platform supports only that. A platform with no
+    // project location should not silently do nothing when `--project` is passed.
+    let r = act(p, { project, dryRun });
+    if (!r.ok) r = act(p, { project: !project, dryRun });
+
+    if (r.ok) {
+      done += 1;
+      console.log(`  ${r.action ?? "wrote"} ${r.path}${r.shared ? "  (shared file — only gistline's block was touched)" : ""}`);
+    } else {
+      console.log(`  skipped ${p.label}: ${r.reason}`);
+    }
+  }
+
+  if (sub === "install" && done) {
+    console.log(`\ngistline registered with ${done} location(s)${dryRun ? " (dry run — nothing written)" : ""}.`);
+    console.log("Verify with: gistline status");
+  }
+  process.exit(done ? 0 : 1);
+}
+
 if (["retrieve", "slice", "grep", "store-stats"].includes(sub)) {
   const store = openStore({ dir: flag("store", DEFAULT_STORE_DIR) });
   const id = argv[1];

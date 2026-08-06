@@ -110,11 +110,11 @@ test("stacktrace compression keeps our frames, drops library noise", () => {
     "    at buildPlan (/repo/lib/planner.mjs:42:7)",
     "    at process (node:internal/process/task_queues:95:5)",
     "    at run (/repo/node_modules/some-lib/index.js:10:1)",
-    "    at main (/repo/bin/teamify.mjs:12:3)",
+    "    at main (/repo/bin/app.mjs:12:3)",
   ].join("\n");
   const out = compressStacktrace(trace, 4000);
   assert.match(out, /buildPlan \(\/repo\/lib\/planner\.mjs/);
-  assert.match(out, /main \(\/repo\/bin\/teamify\.mjs/);
+  assert.match(out, /main \(\/repo\/bin\/app\.mjs/);
   assert.ok(!/node:internal/.test(out));
   assert.ok(!/node_modules/.test(out));
   assert.match(out, /frames omitted/);

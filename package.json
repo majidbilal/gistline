@@ -1,7 +1,7 @@
 {
   "name": "gistline",
-  "version": "0.2.2",
-  "description": "Structure-aware compression for large tool output. Keeps test failures, JSON shape, and your stack frames instead of blindly truncating. Zero dependencies.",
+  "version": "0.3.0",
+  "description": "Compress large command output, logs and documents before an AI assistant reads them - and know whether anything was removed. Zero dependencies, deterministic, with the original always retrievable.",
   "type": "module",
   "license": "MIT",
   "author": "Majid Bilal <majidbilaly@gmail.com>",
@@ -15,7 +15,16 @@
   },
   "main": "./index.mjs",
   "exports": {
-    ".": "./index.mjs"
+    ".": "./index.mjs",
+    "./index.mjs": "./index.mjs",
+    "./store.mjs": "./store.mjs",
+    "./install.mjs": "./install.mjs",
+    "./lossless.mjs": "./lossless.mjs",
+    "./mcp.mjs": "./mcp.mjs",
+    "./core/*.mjs": "./core/*.mjs",
+    "./util/*.mjs": "./util/*.mjs",
+    "./transforms/*.mjs": "./transforms/*.mjs",
+    "./package.json": "./package.json"
   },
   "bin": {
     "gistline": "cli.mjs",
@@ -23,28 +32,59 @@
   },
   "files": [
     "index.mjs",
-    "store.mjs",
-    "mcp.mjs",
     "cli.mjs",
+    "mcp.mjs",
+    "install.mjs",
+    "smoke.mjs",
+    "store.mjs",
+    "lossless.mjs",
+    "core/*.mjs",
+    "util/*.mjs",
+    "transforms/*.mjs",
+    "!**/*.test.mjs",
     "README.md",
     "LICENSE",
-    "ROADMAP.md"
+    "ROADMAP.md",
+    "CHANGELOG.md",
+    "ISSUES.md",
+    "SECURITY.md",
+    "CONTRIBUTING.md"
   ],
   "engines": {
     "node": ">=18"
   },
   "keywords": [
     "compression",
-    "context",
+    "tokens",
+    "context-window",
     "llm",
-    "ai-agents",
+    "ai",
+    "cli",
+    "mcp",
     "logs",
     "test-output",
-    "truncate",
-    "summarize",
-    "cli"
+    "pdf",
+    "docx",
+    "xlsx",
+    "pptx",
+    "html",
+    "markdown",
+    "claude-code",
+    "cursor",
+    "codex",
+    "copilot",
+    "gemini-cli",
+    "aider",
+    "zero-dependencies",
+    "deterministic"
   ],
   "scripts": {
-    "test": "node --test"
+    "test": "node --test *.test.mjs util/*.test.mjs core/*.test.mjs transforms/*.test.mjs",
+    "smoke": "node smoke.mjs",
+    "verify-package": "npm pack && node smoke.mjs",
+    "demo": "node demo.mjs",
+    "demo-pdf": "node demo-pdf.mjs",
+    "demo-xlsx": "node demo-xlsx.mjs",
+    "prepublishOnly": "npm test && npm run smoke"
   }
 }

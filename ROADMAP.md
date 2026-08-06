@@ -26,14 +26,63 @@ real problems get prioritised over speculative features.
 
 ## Coming next
 
+### Lossless-first compression
+
+Today gistline decides what to keep and drops the rest. A large amount of what makes output big is not extra
+information — it is the same shape repeated. An array of 200 records repeats its field names 200 times; a log repeats
+the same handful of message formats thousands of times.
+
+So before anything is dropped, gistline will try to state the repetition once:
+
+- **Tables** — an array of like-shaped records becomes a header and rows. Measured at **67.9% smaller with nothing
+  removed** on a 300-record API response.
+- **Log formats** — each repeated message format stated once, then only the parts that vary. Measured at **29.2%
+  smaller with nothing removed**, and expected to improve considerably once timestamps are stored as differences
+  rather than repeated in full.
+
+Anything dropped afterwards is dropped from a much smaller starting point, and the report says which stages were
+lossless and which were not — so you can tell "nothing was removed" from "1,400 lines were dropped".
+
+### Reading documents
+
+Most content that reaches a model does not start as text. It arrives as a spreadsheet, a Word document, a slide deck,
+a scraped page or a PDF, and those formats spend a great many tokens on structure that carries no meaning.
+
+gistline will convert what it can read to Markdown first, then compress it — and the two stages compound, because a
+spreadsheet becomes a table and tables are what the lossless stage is best at.
+
+Planned, in this order:
+
+| Format | Intent |
+|---|---|
+| **HTML** | strip boilerplate, keep headings, lists, tables and links |
+| **ZIP** | read archives, which is also what the next three need |
+| **XLSX** | sheets to Markdown tables |
+| **DOCX** | headings, paragraphs, lists, tables |
+| **PPTX** | slide titles and body text |
+| **Images** | report what an image will cost in tokens, and when a smaller version would cost less for no loss |
+| **PDF** | best effort on text, and an honest refusal otherwise |
+
+**Two commitments about this, because they matter more than the feature list:**
+
+**Every stage can decline.** A converter that always produces something produces plausible nonsense on the inputs it
+cannot handle. If gistline cannot read a file properly — a scanned PDF, an encrypted document, a layout it cannot
+follow — it will say so rather than emit text that looks right and is not.
+
+**No OCR, and no new dependencies.** Reading images requires a model, and gistline stays dependency-free. For scanned
+documents, use a dedicated converter; gistline will compress what that converter gives it.
+
 ### Better handling of ordinary text
 **This is the honest weak spot today.** If your content has no errors and no structure — plain prose,
-a CSV export, an HTML page, an `npm install` log — there's nothing for gistline to latch onto, so it
+a CSV export, an `npm install` log — there's nothing for gistline to latch onto, so it
 falls back to keeping the start and end. That works, but it's blunt.
 
 Planned: strategies that understand **CSV/TSV** (keep the header and a representative sample),
-**HTML/XML** (keep structure, drop boilerplate), **install logs** (keep what changed and what
-warned), and **prose** (keep opening, closing, and the parts that carry information).
+**install logs** (keep what changed and what warned), and **prose** (keep opening, closing, and the
+parts that carry information).
+
+*HTML and XML moved to "Reading documents" above, where they belong — they are a conversion problem
+before they are a compression one.*
 
 ### More accurate token counts
 Token estimates are currently one formula for all content. Since gistline already detects *what kind*

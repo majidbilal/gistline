@@ -14,6 +14,13 @@
 // Pure and dependency-free: no model call, no filesystem, no clock.
 
 /** Default character budget for a single output entering context. */
+import { createContext, estimateTokens as estimateTokensCore, charsForTokens as charsForTokensCore } from "./core/context.mjs";
+import { runPipeline } from "./core/pipeline.mjs";
+// Ingestion: bytes to text. A PRE-STAGE, not a transform — see the header of core/ingest.mjs for why.
+import { ingest, tryIngest, UnsupportedFormat } from "./core/ingest.mjs";
+
+export { ingest, tryIngest, UnsupportedFormat };
+
 export const DEFAULT_BUDGET = 4000;
 
 /**
@@ -242,7 +249,7 @@ const STRATEGIES = {
  * @returns {{ text, kind, originalChars, compressedChars, originalTokens, compressedTokens,
  *             ratio, compressed, note, retrievalId }}
  */
-export function gist(text, { budget = DEFAULT_BUDGET, maxTokens = null, kind = null, label = "", store = null } = {}) {
+export function gist(text, { budget = DEFAULT_BUDGET, maxTokens = null, kind = null, label = "", store = null, transforms = null } = {}) {
   const raw = text == null ? "" : String(text);
   const detected = kind ?? detectKind(raw);
   const effective = maxTokens != null ? charsForTokens(maxTokens) : budget;
@@ -253,13 +260,54 @@ export function gist(text, { budget = DEFAULT_BUDGET, maxTokens = null, kind = n
       originalChars: raw.length, compressedChars: raw.length,
       originalTokens: estimateTokens(raw), compressedTokens: estimateTokens(raw),
       ratio: 1, compressed: false, note: null, retrievalId: null,
+      // The SAME SHAPE as the compressed path, always.
+      //
+      // These were missing here, so `gist()` returned one shape for large input and another for small — and a caller
+      // doing `result.applied.filter(...)` crashed on exactly the inputs that needed no work. A function whose return
+      // type depends on its argument's size is a trap, and it caught me while checking my own wiring.
+      applied: [], lossy: false,
     };
   }
 
-  const strategy = STRATEGIES[detected] ?? compressLog;
-  let body = strategy(raw, effective);
-  // A strategy must never exceed the budget, even if its own trimming was optimistic.
-  if (body.length > effective) body = headTail(body, effective);
+  // THE PIPELINE, not a single strategy.
+  //
+  // Transforms are supplied by the caller-facing registry so this file does not import them and create a cycle:
+  // `transforms/legacy.mjs` imports the strategies FROM here, so importing it here would be circular. The registry is
+  // injected instead — which also means a caller can supply their own ordering, and the pipeline is testable with
+  // fakes.
+  //
+  // When no registry is given, behaviour is exactly the previous single-strategy path. That is deliberate: the
+  // migration must not change output, and the 102 pre-existing assertions are the check.
+  let body;
+  let applied;
+  let truncatable = true;
+  // Whether the final safety net still has a job. When a pipeline runs, its own last-resort transform IS the net, and
+  // applying it again double-truncates — a parity check caught exactly that: both paths reached 452 characters with
+  // DIFFERENT content, because the pipeline path truncated twice and the second pass re-inserted an elision marker.
+  let netNeeded = true;
+
+  if (transforms && transforms.length) {
+    const ctx = createContext(raw, { kind: detected, budget: effective, label });
+    const out = runPipeline(ctx, transforms);
+    body = out.text;
+    applied = out.applied;
+    truncatable = out.truncatable;
+    netNeeded = false;
+  } else {
+    const strategy = STRATEGIES[detected] ?? compressLog;
+    body = strategy(raw, effective);
+    applied = [{ id: detected, applied: body.length < raw.length, lossless: false }];
+  }
+
+  // The final safety net for the legacy path, and it now RESPECTS structure.
+  //
+  // Previously applied blindly to any output, which cut a table's rows in half and produced text that looks structured
+  // and is silently incomplete. A transform whose output must not be cut sets `truncatable: false`, and then the
+  // over-budget output is preferred to a corrupted one — being slightly too large is recoverable, being quietly wrong
+  // is not.
+  if (netNeeded && body.length > effective && truncatable) body = headTail(body, effective);
+
+  const lossy = applied.some((a) => a.applied && a.lossless === false);
 
   // Keep the original if a store was provided, so retrieval is real.
   let retrievalId = null;
@@ -284,6 +332,10 @@ export function gist(text, { budget = DEFAULT_BUDGET, maxTokens = null, kind = n
     compressed: true,
     note,
     retrievalId,
+    // NEW, additive only: what ran and whether anything was actually removed. Existing callers are unaffected because
+    // nothing above changed; a caller that wants to know whether the output is complete can now ask instead of guess.
+    applied,
+    lossy,
   };
 }
 
@@ -319,4 +371,44 @@ export function formatGistStats(snap) {
   if (!snap?.calls) return "gistline: no output processed";
   const pct = Math.round((1 - snap.ratio) * 100);
   return `gistline: ${snap.compressedCalls}/${snap.calls} outputs compressed, ${snap.charsSaved.toLocaleString()} chars saved (${pct}% smaller)`;
+}
+
+/**
+ * Ingest then compress: the entry point for a FILE rather than a string.
+ *
+ * Deliberately separate from `gist()`. `gist` compresses text and its contract is settled; this converts first and then
+ * calls it. Adding binary handling inside `gist` would have changed an interface nine transforms share in order to serve
+ * one input type — and every one of its tests assumes text.
+ *
+ * The returned shape is `gist`'s, plus what conversion did. A caller that only cares about the text ignores the extra
+ * fields; a caller deciding whether to trust the output can see that a spreadsheet was read and what was left out.
+ */
+export function gistFile(input, { name = "", ...opts } = {}) {
+  const ingested = ingest(input, { name });
+
+  // Nothing to compress. Returned in the same shape rather than as a special case, for the reason the early-return path
+  // in `gist` was fixed: a function whose result shape depends on its input is a trap.
+  if (!ingested.text) {
+    return {
+      text: "", kind: ingested.kind, originalChars: ingested.original, compressedChars: 0,
+      originalTokens: 0, compressedTokens: 0, ratio: 0, compressed: false, note: null, retrievalId: null,
+      applied: [], lossy: false,
+      ingest: { kind: ingested.kind, converted: ingested.converted, notes: ingested.notes, originalBytes: ingested.original },
+    };
+  }
+
+  const out = gist(ingested.text, { ...opts, transforms: opts.transforms ?? null });
+
+  return {
+    ...out,
+    // `originalChars` from `gist` is the length of the CONVERTED text, which would understate the saving. The bytes that
+    // arrived are what the caller actually paid for, so both are reported and neither is hidden.
+    ingest: {
+      kind: ingested.kind,
+      converted: ingested.converted,
+      notes: ingested.notes,
+      originalBytes: ingested.original,
+      convertedChars: ingested.text.length,
+    },
+  };
 }
