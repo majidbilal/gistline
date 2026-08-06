@@ -20,7 +20,15 @@ jobs:
       matrix:
         # Zero dependencies is a claim worth testing on every platform, not asserting.
         os: [ubuntu-latest, windows-latest, macos-latest]
-        node: ["18", "20", "22"]
+        # 20.15 is the real floor, not 18.
+        #
+        # `util/unzip.mjs` imports `crc32` from `node:zlib`, added in v20.15.0 and v22.2.0. On Node 18 that import is
+        # undefined and every ZIP-based format — DOCX, XLSX, PPTX — throws. The matrix used to include "18", which was
+        # testing a version the code cannot support, and it could not catch the problem because a separate glob failure
+        # aborted the run before any test executed.
+        #
+        # "22" is pinned to a patch above 22.2.0 for the same reason: v22.0 and v22.1 predate crc32.
+        node: ["20.15", "22.2", "22", "24"]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -29,4 +37,21 @@ jobs:
           package-manager-cache: false
       - name: Confirm there is nothing to install
         run: node -e "const p=require('./package.json');if(p.dependencies&&Object.keys(p.dependencies).length){console.error('runtime dependencies found');process.exit(1)}console.log('zero runtime dependencies')"
+
+      # The floor is verified rather than declared: if crc32 is missing, the engines range is wrong and every ZIP format
+      # is broken on this version. Cheaper to fail here with a clear message than inside a reader.
+      - name: Verify the declared engine floor holds
+        run: node -e "import('node:zlib').then(z=>{if(typeof z.crc32!=='function'){console.error('zlib.crc32 missing - engines range is wrong for '+process.version);process.exit(1)}console.log('zlib.crc32 present on '+process.version)})"
+
       - run: npm test
+
+      # Documentation drift is a bug. This checks the platform count, the engine floor across the badge, the table and
+      # package.json, every command shown, every internal link, and that every file listed in `files` exists. It has
+      # already caught three wrong claims, including an engines range the code could not honour.
+      - name: Verify the README's claims against the code
+        run: npm run check-claims
+
+      # The check that caught a real packaging bug: `exports` exposed only the entry point, so every other module was
+      # unreachable from an installed package while all 379 tests passed in the repository.
+      - name: Verify the published package works when installed
+        run: npm run smoke

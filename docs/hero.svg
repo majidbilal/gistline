@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="420" viewBox="0 0 880 420" role="img" aria-label="A terminal showing a test suite of 69,567 characters compressed to 131, with the failures preserved, and two measured lossless results: a 300-record JSON response and a 1,200-line build log.">
+<title>gistline: large output made smaller, with nothing removed</title>
+<rect x="0" y="0" width="880" height="420" rx="10" fill="#0d1117"/>
+<rect x="0.5" y="0.5" width="879" height="419" rx="10" fill="none" stroke="#30363d"/>
+<rect x="0" y="0" width="880" height="34" rx="10" fill="#161b22" opacity="1"/>
+<rect x="0" y="24" width="880" height="10" fill="#161b22"/>
+<circle cx="20" cy="17" r="5.5" fill="#ff5f57"/>
+<circle cx="38" cy="17" r="5.5" fill="#febc2e"/>
+<circle cx="56" cy="17" r="5.5" fill="#28c840"/>
+<text x="414" y="21" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" font-weight="400" fill="#8b949e" opacity="1" xml:space="preserve">gistline</text>
+<text x="24" y="66" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13.5" font-weight="600" fill="#58a6ff" opacity="1" xml:space="preserve">$ </text>
+<text x="44" y="66" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13.5" font-weight="400" fill="#e6edf3" opacity="1" xml:space="preserve">npm test 2&gt;&amp;1 | gistline --kind test --label suite</text>
+<text x="24" y="96" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13.5" font-weight="400" fill="#7ee787" opacity="1" xml:space="preserve">[suite output compressed: 69,567 -&gt; 131 chars.</text>
+<text x="24" y="115" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13.5" font-weight="400" fill="#7ee787" opacity="1" xml:space="preserve"> Nothing was deleted - request the verbatim output if you need a dropped detail.]</text>
+<text x="24" y="134" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13.5" font-weight="400" fill="#8b949e" opacity="1" xml:space="preserve">[compressed: 758 passing lines omitted]</text>
+<text x="24" y="162" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13.5" font-weight="400" fill="#e6edf3" opacity="1" xml:space="preserve"># tests 379</text>
+<text x="24" y="181" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13.5" font-weight="400" fill="#e6edf3" opacity="1" xml:space="preserve"># pass  379</text>
+<text x="24" y="200" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13.5" font-weight="400" fill="#e6edf3" opacity="1" xml:space="preserve"># fail  0</text>
+<line x1="24" y1="233" x2="856" y2="233" stroke="#30363d"/>
+<text x="24" y="259" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" font-weight="400" fill="#8b949e" opacity="1" xml:space="preserve">Lossless - nothing removed, only stated more compactly</text>
+<text x="24" y="281" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" font-weight="400" fill="#c9d1d9" opacity="1" xml:space="preserve">300-record JSON response</text>
+<text x="424" y="281" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" font-weight="400" fill="#8b949e" opacity="1" xml:space="preserve">50,676 -&gt; 16,249</text>
+<text x="624" y="281" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" font-weight="600" fill="#7ee787" opacity="1" xml:space="preserve">67.9% smaller</text>
+<rect x="24" y="291" width="383" height="7" rx="3" fill="#30363d" opacity="1"/>
+<rect x="24" y="291" width="123" height="7" rx="3" fill="#2ea043" opacity="1"/>
+<text x="24" y="321" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" font-weight="400" fill="#c9d1d9" opacity="1" xml:space="preserve">1,200-line build log</text>
+<text x="424" y="321" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" font-weight="400" fill="#8b949e" opacity="1" xml:space="preserve">68,803 -&gt; 48,651</text>
+<text x="624" y="321" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" font-weight="600" fill="#7ee787" opacity="1" xml:space="preserve">29.3% smaller</text>
+<rect x="24" y="331" width="520" height="7" rx="3" fill="#30363d" opacity="1"/>
+<rect x="24" y="331" width="368" height="7" rx="3" fill="#2ea043" opacity="1"/>
+<text x="24" y="363" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13.5" font-weight="600" fill="#58a6ff" opacity="1" xml:space="preserve">$ </text>
+<text x="44" y="363" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13.5" font-weight="400" fill="#e6edf3" opacity="1" xml:space="preserve">gistline retrieve dd0fd19eb38f9210</text>
+<text x="424" y="363" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" font-weight="400" fill="#8b949e" opacity="1" xml:space="preserve">the original, byte for byte</text>
+</svg>

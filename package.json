@@ -48,10 +48,11 @@
     "CHANGELOG.md",
     "ISSUES.md",
     "SECURITY.md",
-    "CONTRIBUTING.md"
+    "CONTRIBUTING.md",
+    "docs/"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=20.15.0"
   },
   "keywords": [
     "compression",
@@ -79,12 +80,14 @@
     "deterministic"
   ],
   "scripts": {
-    "test": "node --test *.test.mjs util/*.test.mjs core/*.test.mjs transforms/*.test.mjs",
+    "test": "node --test",
     "smoke": "node smoke.mjs",
     "verify-package": "npm pack && node smoke.mjs",
     "demo": "node demo.mjs",
     "demo-pdf": "node demo-pdf.mjs",
     "demo-xlsx": "node demo-xlsx.mjs",
-    "prepublishOnly": "npm test && npm run smoke"
+    "prepublishOnly": "npm test && npm run check-claims && npm run smoke",
+    "check-claims": "node check-claims.mjs",
+    "hero": "node make-hero.mjs"
   }
 }
