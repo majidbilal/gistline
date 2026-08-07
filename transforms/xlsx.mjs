@@ -14,7 +14,7 @@
 //   4. Merged cells repeat a value in the source or leave blanks; either way the shape must stay rectangular.
 
 import { readZip } from "../util/unzip.mjs";
-import { doc, heading, table, paragraph } from "../core/doc.mjs";
+import { doc, heading, table, paragraph, list } from "../core/doc.mjs";
 
 /** The files a workbook actually needs. Everything else — images, themes, printer settings — is skipped unread. */
 const wanted = (name) =>
@@ -22,7 +22,15 @@ const wanted = (name) =>
   name === "xl/_rels/workbook.xml.rels" ||
   name === "xl/sharedStrings.xml" ||
   name === "xl/styles.xml" ||
-  /^xl\/worksheets\/[^/]+\.xml$/.test(name);
+  /^xl\/worksheets\/[^/]+\.xml$/.test(name) ||
+  // Cell comments and their relationships. A comment on a cell is often the only explanation of why a figure is what it
+  // is — "restated after the audit" beside a number is the difference between data and information — and they were not
+  // being read at all.
+  /^xl\/comments\d*\.xml$/.test(name) ||
+  /^xl\/worksheets\/_rels\/[^/]+\.rels$/.test(name) ||
+  // Modern comments (threaded), which Excel writes alongside the legacy form rather than instead of it.
+  /^xl\/threadedComments\/threadedComment\d*\.xml$/.test(name) ||
+  name === "xl/persons/person.xml";
 
 const text = (buf) => (buf ? buf.toString("utf8") : "");
 
@@ -224,6 +232,9 @@ export function readXlsx(buffer) {
 
   const blocks = [];
   let cells = 0;
+  let commentCount = 0;
+  // The person list is workbook-wide, so it is read once rather than per sheet.
+  const persons = readPersons(text(files.get("xl/persons/person.xml")));
 
   for (const sheet of sheets) {
     const xml = text(files.get(sheet.path));
@@ -243,6 +254,39 @@ export function readXlsx(buffer) {
     if (firstLooksLikeHeader) blocks.push(table(rows[0], rows.slice(1)));
     else blocks.push(table([], rows));
 
+    /**
+     * Comments for THIS sheet, found through its own relationships.
+     *
+     * Resolved per sheet rather than by matching `sheet1.xml` to `comments1.xml`: those numbers disagree whenever sheets
+     * have been deleted or reordered, and attaching one sheet's comments to another is worse than attaching none — the same
+     * mistake the PowerPoint reader avoids with speaker notes.
+     */
+    const relsPath = sheet.path.replace(/^xl\/worksheets\//, "xl/worksheets/_rels/") + ".rels";
+    const rels = text(files.get(relsPath));
+
+    const legacyTarget = (rels.match(/Target="([^"]*comments\d*\.xml)"/) ?? [])[1];
+    const legacyPath = legacyTarget ? `xl/${legacyTarget.replace(/^\.\.\//, "")}` : null;
+    const threadedTarget = (rels.match(/Target="([^"]*threadedComment\d*\.xml)"/) ?? [])[1];
+    const threadedPath = threadedTarget ? `xl/${threadedTarget.replace(/^\.\.\//, "")}` : null;
+
+    const legacy = legacyPath ? readCellComments(text(files.get(legacyPath))) : new Map();
+    const threaded = threadedPath ? readThreadedComments(text(files.get(threadedPath)), persons) : new Map();
+
+    // Threaded entries win where both describe the same cell, because they carry a real author and a date.
+    const threadedRefs = new Set([...threaded.values()].map((c) => c.ref));
+    const items = [
+      ...[...threaded.values()].map((c) =>
+        `**${c.author || "unknown"}**${c.date ? `, ${c.date}` : ""} on ${c.ref}${c.reply ? " (reply)" : ""}: ${c.text}`),
+      ...[...legacy.values()].filter((c) => !threadedRefs.has(c.ref)).map((c) =>
+        `**${c.author || "unknown"}** on ${c.ref}: ${c.text}`),
+    ];
+
+    if (items.length) {
+      blocks.push(heading(3, `Comments on ${sheet.name}`));
+      blocks.push(list(items));
+      commentCount += items.length;
+    }
+
     cells += rows.reduce((n, r) => n + r.length, 0);
   }
 
@@ -250,6 +294,102 @@ export function readXlsx(buffer) {
 
   // Stated plainly rather than implied: these are real limits and a reader of the output should know them.
   notes.push("Formulas are shown as their last calculated value. Charts, images and cell formatting are not included.");
+  if (commentCount) {
+    notes.push(`${commentCount} cell comment(s) are listed per sheet, with their author and the cell they annotate.`);
+  }
 
-  return { document: doc(blocks, { notes, source: "xlsx" }), sheets: sheets.length, cells };
+  return { document: doc(blocks, { notes, source: "xlsx" }), sheets: sheets.length, cells, comments: commentCount };
+}
+
+/**
+ * Read a sheet's cell comments.
+ *
+ * Two formats coexist and both must be read. Excel writes the LEGACY form (`xl/comments1.xml`) for compatibility and, when
+ * comments are threaded, ALSO writes a modern form — so reading only one gives either nothing on a modern file or nothing
+ * on an older one.
+ *
+ * Legacy: `<comment ref="B4" authorId="0"><text><r><t>…</t></r></text></comment>`, with authors in an `<authors>` list
+ * indexed by `authorId`.
+ *
+ * The author is worth carrying for the same reason it is in Word: "restated after the audit" means something different
+ * depending on who wrote it.
+ */
+export function readCellComments(xml) {
+  const out = new Map();
+  if (!xml) return out;
+
+  // The author list is positional, so its order is the mapping.
+  const authorsBlock = xml.match(/<authors\b[^>]*>([\s\S]*?)<\/authors>/);
+  const authors = authorsBlock
+    ? [...authorsBlock[1].matchAll(/<author\b[^>]*>([\s\S]*?)<\/author>/g)].map((m) => unxml(m[1]).trim())
+    : [];
+
+  for (const m of xml.matchAll(/<comment\b([^>]*)>([\s\S]*?)<\/comment>/g)) {
+    const ref = (m[1].match(/ref="([A-Z]+\d+)"/) ?? [])[1];
+    if (!ref) continue;
+
+    const authorId = Number((m[1].match(/authorId="(\d+)"/) ?? [])[1] ?? -1);
+
+    // Every `<t>` joined, because a comment is split across runs whenever part of it is formatted — exactly as in Word.
+    const body = [...m[2].matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)].map((t) => unxml(t[1])).join("").trim();
+    if (!body) continue;
+
+    /**
+     * Excel prefixes a comment with the author's name and a colon, then a newline. Stripping that prefix avoids printing
+     * the name twice, which is what happens if the raw body is used alongside the resolved author.
+     */
+    const author = authors[authorId] ?? "";
+    const cleaned = author && body.startsWith(`${author}:`)
+      ? body.slice(author.length + 1).trim()
+      : body;
+
+    out.set(ref, { ref, author, text: cleaned.replace(/\s+/g, " ") });
+  }
+
+  return out;
+}
+
+/**
+ * Read threaded comments, which carry the author as a person id rather than inline.
+ *
+ * Merged with the legacy set rather than replacing it: the same comment usually appears in both, and the threaded version is
+ * the better one because it has a real author id and a timestamp.
+ */
+export function readThreadedComments(xml, persons) {
+  const out = new Map();
+  if (!xml) return out;
+
+  for (const m of xml.matchAll(/<threadedComment\b([^>]*)>([\s\S]*?)<\/threadedComment>/g)) {
+    const ref = (m[1].match(/ref="([A-Z]+\d+)"/) ?? [])[1];
+    if (!ref) continue;
+
+    const personId = (m[1].match(/personId="\{?([^"}]+)\}?"/) ?? [])[1] ?? "";
+    const date = (m[1].match(/dT="(\d{4}-\d{2}-\d{2})/) ?? [])[1] ?? "";
+    const body = unxml((m[2].match(/<text\b[^>]*>([\s\S]*?)<\/text>/) ?? [, ""])[1]).trim().replace(/\s+/g, " ");
+    if (!body) continue;
+
+    // A reply has a parentId; it is kept, because a thread's conclusion is usually in the last reply rather than the first
+    // comment.
+    out.set(`${ref}\u0000${out.size}`, {
+      ref,
+      author: persons.get(personId) ?? "",
+      date,
+      text: body,
+      reply: /parentId=/.test(m[1]),
+    });
+  }
+
+  return out;
+}
+
+/** The person list threaded comments refer to by id. */
+export function readPersons(xml) {
+  const out = new Map();
+  if (!xml) return out;
+  for (const m of String(xml).matchAll(/<person\b([^>]*)\/?>/g)) {
+    const id = (m[1].match(/id="\{?([^"}]+)\}?"/) ?? [])[1];
+    const name = unxml((m[1].match(/displayName="([^"]*)"/) ?? [])[1] ?? "").trim();
+    if (id && name) out.set(id, name);
+  }
+  return out;
 }

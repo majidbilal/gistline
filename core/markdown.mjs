@@ -135,8 +135,17 @@ export function toMarkdown(d, { includeNotes = true, mode = "information" } = {}
 
   if (!includeNotes || !d.notes.length) return body;
 
+  /**
+   * "About this conversion", not "what it could not represent".
+   *
+   * The heading used to claim everything below it was a limitation. Then readers began reporting things they DID — comments
+   * collected, running headers stated once, pages recovered — and those appeared under a heading calling them failures.
+   * A misleading heading is the same defect as a stale claim: a reader believes it.
+   *
+   * The notes are facts about the conversion. Some are limits, some are not, and the reader can tell which from the text.
+   */
   const notes = d.notes.map((n) => `- ${n}`).join("\n");
-  return `${body}\n\n---\n\n**What this conversion could not represent**\n\n${notes}`;
+  return `${body}\n\n---\n\n**About this conversion**\n\n${notes}`;
 }
 
 /** Was the conversion worth doing? Compared on rendered length, since that is what the next stage receives. */

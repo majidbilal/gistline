@@ -215,3 +215,91 @@ test("rows are padded to a common width, so the table is rectangular", () => {
   const widths = new Set(rows.map((r) => r.length));
   assert.equal(widths.size, 1, `ragged rows: ${[...widths].join(", ")}`);
 });
+
+// --- cell comments: both formats, resolved per sheet ------------------------------------------------------
+//
+// A comment on a cell is often the only explanation of why a figure is what it is. These were not read at all, and the
+// output did not even mention them — so unlike Word, there was no stale claim, just silence.
+
+const withComments = () => makeXlsx([
+  ["xl/workbook.xml", `<workbook><sheets><sheet name="Q3" r:id="rId1"/></sheets></workbook>`],
+  ["xl/_rels/workbook.xml.rels", `<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>`],
+  ["xl/sharedStrings.xml", `<sst><si><t>Region</t></si><si><t>Revenue</t></si><si><t>North</t></si></sst>`],
+  ["xl/worksheets/sheet1.xml", `<worksheet><sheetData>
+    <row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>
+    <row r="2"><c r="A2" t="s"><v>2</v></c><c r="B2"><v>1200</v></c></row>
+  </sheetData></worksheet>`],
+  // Resolved through the SHEET's relationships, not by matching sheet1 to comments1 — those numbers disagree whenever
+  // sheets are deleted, and this file deliberately uses comments9 to prove the resolution is real.
+  ["xl/worksheets/_rels/sheet1.xml.rels", `<Relationships>
+    <Relationship Id="rId1" Target="../comments9.xml"/>
+    <Relationship Id="rId2" Target="../threadedComments/threadedComment9.xml"/>
+  </Relationships>`],
+  ["xl/comments9.xml", `<comments><authors><author>Dana Okafor</author><author>Priya Raman</author></authors>
+    <commentList>
+      <comment ref="B2" authorId="1"><text><r><t>Priya Raman:</t></r><r><t xml:space="preserve">
+        Restated after the audit.</t></r></text></comment>
+      <comment ref="A2" authorId="0"><text><r><t>Check the spelling.</t></r></text></comment>
+    </commentList></comments>`],
+  ["xl/threadedComments/threadedComment9.xml", `<ThreadedComments>
+    <threadedComment ref="B2" dT="2026-08-05T10:00:00Z" personId="{ABC-123}" id="{1}">
+      <text>Restated after the audit.</text></threadedComment>
+    <threadedComment ref="B2" dT="2026-08-06T09:30:00Z" personId="{DEF-456}" id="{2}" parentId="{1}">
+      <text>Agreed, signed off.</text></threadedComment>
+  </ThreadedComments>`],
+  ["xl/persons/person.xml", `<personList>
+    <person displayName="Priya Raman" id="{ABC-123}"/>
+    <person displayName="Dana Okafor" id="{DEF-456}"/>
+  </personList>`],
+]);
+
+test("cell comments are read, attributed to their author and their CELL", () => {
+  const { document, comments } = readXlsx(withComments());
+  const md = toMarkdown(document);
+
+  assert.ok(comments > 0, "comments should be counted");
+  assert.match(md, /### Comments on Q3/, "listed per sheet, since a workbook has many");
+  assert.match(md, /on B2/, "the cell reference is what makes the comment locatable");
+  assert.match(md, /Restated after the audit\./);
+  assert.match(md, /Check the spelling\./);
+});
+
+test("comments are found through the sheet's OWN relationships", () => {
+  // The fixture uses comments9.xml for sheet1.xml. Matching on the number would find nothing, and matching the wrong file
+  // would attach another sheet's comments — worse than attaching none.
+  const md = toMarkdown(readXlsx(withComments()).document);
+  assert.match(md, /Restated after the audit\./, "comments9.xml was resolved for sheet1.xml");
+});
+
+test("BOTH comment formats are read, because Excel writes both", () => {
+  // A threaded comment is also written in the legacy form for compatibility. Reading only one format gives nothing on a
+  // modern file or nothing on an older one.
+  const md = toMarkdown(readXlsx(withComments()).document);
+  assert.match(md, /Agreed, signed off\./, "the threaded reply exists only in the modern format");
+  assert.match(md, /\(reply\)/, "and a reply is marked as one, since a thread's conclusion is usually the last message");
+});
+
+test("a threaded comment wins over its legacy duplicate", () => {
+  // The same comment appears in both formats. Printing it twice would read as two reviewers saying the same thing.
+  const md = toMarkdown(readXlsx(withComments()).document);
+  assert.equal((md.match(/Restated after the audit\./g) ?? []).length, 1, "it must appear once, not twice");
+});
+
+test("a threaded comment carries its author and date; the legacy one its author", () => {
+  const md = toMarkdown(readXlsx(withComments()).document);
+  assert.match(md, /\*\*Priya Raman\*\*, 2026-08-05 on B2/, "person id resolved to a name, date to the day");
+  assert.match(md, /\*\*Dana Okafor\*\* on A2/, "legacy authorId resolved positionally");
+});
+
+test("Excel's duplicated author prefix is stripped, not printed twice", () => {
+  // Excel writes "Author:\n" at the start of a legacy comment body. Left in place, the name appears twice.
+  const md = toMarkdown(readXlsx(withComments()).document);
+  assert.ok(!/Priya Raman\*\*.*Priya Raman:/s.test(md), "the name must not appear both as author and in the body");
+});
+
+test("a workbook with no comments says nothing about them", () => {
+  // Silence is correct here. A note claiming "0 comments" is noise on the overwhelming majority of spreadsheets.
+  const md = toMarkdown(readXlsx(BOOK()).document);
+  assert.ok(!md.includes("### Comments"), "no comments section");
+  assert.ok(!/cell comment\(s\)/.test(md), "and no note about comments");
+});

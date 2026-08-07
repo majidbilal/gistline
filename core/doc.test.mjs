@@ -75,12 +75,15 @@ test("raw is emitted untouched, so a reader is never forced to lie", () => {
 
 test("notes are surfaced, clearly marked, at the end", () => {
   // A converter that does not say what it skipped invites the assumption that it read everything.
+  //
+  // The heading is "About this conversion" rather than "what it could not represent": readers now report things they DID —
+  // comments collected, headers stated once — and those would appear under a heading calling them failures.
   const d = doc([paragraph("body")], { notes: ["Tracked changes were ignored.", "2 embedded images were skipped."] });
   const md = toMarkdown(d);
-  assert.match(md, /What this conversion could not represent/);
+  assert.match(md, /About this conversion/);
   assert.match(md, /- Tracked changes were ignored\./);
   assert.match(md, /- 2 embedded images were skipped\./);
-  assert.ok(md.indexOf("body") < md.indexOf("could not represent"), "notes come after the content");
+  assert.ok(md.indexOf("body") < md.indexOf("About this conversion"), "notes come after the content");
 });
 
 test("no notes means no notes section, not an empty one", () => {

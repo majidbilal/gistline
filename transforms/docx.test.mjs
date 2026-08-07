@@ -50,7 +50,7 @@ const DOCUMENT = `<w:document><w:body>
   <w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t>Service Agreement</w:t></w:r></w:p>
   <w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Scope</w:t></w:r></w:p>
   <w:p><w:r><w:t xml:space="preserve">The supplier shall </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>not</w:t></w:r><w:r><w:t xml:space="preserve"> subcontract.</w:t></w:r></w:p>
-  <w:p><w:r><w:t xml:space="preserve">Fee is </w:t></w:r><w:del><w:r><w:delText>1000</w:delText></w:r></w:del><w:ins><w:r><w:t>2500</w:t></w:r></w:ins><w:r><w:t xml:space="preserve"> per month.</w:t></w:r></w:p>
+  <w:p><w:commentRangeStart w:id="3"/><w:r><w:t xml:space="preserve">Fee is </w:t></w:r><w:del><w:r><w:delText>1000</w:delText></w:r></w:del><w:ins><w:r><w:t>2500</w:t></w:r></w:ins><w:r><w:t xml:space="preserve"> per month.</w:t></w:r><w:commentRangeEnd w:id="3"/><w:r><w:commentReference w:id="3"/></w:r></w:p>
   <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="5"/></w:numPr></w:pPr><w:r><w:t>First obligation</w:t></w:r></w:p>
   <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="5"/></w:numPr></w:pPr><w:r><w:t>Second obligation</w:t></w:r></w:p>
   <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="7"/></w:numPr></w:pPr><w:r><w:t>A bulleted note</w:t></w:r></w:p>
@@ -68,12 +68,20 @@ const FOOTNOTES = `<w:footnotes>
   <w:footnote w:id="2"><w:p><w:r><w:t>Rates reviewed annually.</w:t></w:r></w:p></w:footnote>
 </w:footnotes>`;
 
+const COMMENTS = `<w:comments>
+  <w:comment w:id="1" w:author="Dana Okafor" w:initials="DO" w:date="2026-08-04T11:20:00Z">
+    <w:p><w:r><w:t>Approved on my side.</w:t></w:r></w:p></w:comment>
+  <w:comment w:id="3" w:author="Priya Raman" w:initials="PR" w:date="2026-08-05T16:02:00Z">
+    <w:p><w:r><w:t>Check this fee against schedule 2.</w:t></w:r></w:p></w:comment>
+</w:comments>`;
+
 const DOC = () => zipOf([
   ["[Content_Types].xml", "<Types/>"],
   ["word/document.xml", DOCUMENT],
   ["word/numbering.xml", NUMBERING],
   ["word/_rels/document.xml.rels", RELS],
   ["word/footnotes.xml", FOOTNOTES],
+  ["word/comments.xml", COMMENTS],
 ]);
 
 // --- the gate ----------------------------------------------------------------------------------------------
@@ -187,10 +195,53 @@ test("footnotes are collected at the end, and the separator entries are not cont
   assert.ok(!md.includes("continuation"), "footnote id 0 is not content");
 });
 
-test("comments are excluded and said to be excluded", () => {
+test("comments are READ, with their author and the text they point at", () => {
+  // This test previously asserted comments were EXCLUDED, which was accurate and a real gap: a reviewer's comment is
+  // frequently the most useful text in a document, and it is exactly what someone asking "what needs changing" wants.
   const md = toMarkdown(readDocx(DOC()).document);
-  assert.match(md, /Comments are not included\./);
-  assert.match(md, /Reviewed\./, "the paragraph containing the reference is still read");
+
+  assert.match(md, /## Comments/);
+  assert.match(md, /\*\*Priya Raman\*\*/, "the author must be named");
+  assert.match(md, /2026-08-05/, "and the date");
+  assert.match(md, /check this fee against schedule 2/i, "the comment text itself");
+  // The anchor is what makes a comment actionable: "check this" is meaningless without knowing what "this" is.
+  assert.match(md, /on "Fee is 2500 per month\."/, "the commented span must be quoted");
+
+  assert.match(md, /Reviewed\./, "the paragraph carrying the reference is still read");
+});
+
+test("a comment with no anchor range is still reported", () => {
+  // A comment can be attached to a position rather than a span. Dropping it because there is nothing to quote would lose
+  // the reviewer's point entirely.
+  const zip = zipOf([
+    ["word/document.xml", `<w:document><w:body><w:p><w:r><w:commentReference w:id="7"/></w:r><w:r><w:t>Body.</w:t></w:r></w:p></w:body></w:document>`],
+    ["word/comments.xml", `<w:comments><w:comment w:id="7" w:author="Sam Vale" w:date="2026-08-06T09:00:00Z"><w:p><w:r><w:t>General point about tone.</w:t></w:r></w:p></w:comment></w:comments>`],
+  ]);
+  const md = toMarkdown(readDocx(zip).document);
+  assert.match(md, /\*\*Sam Vale\*\*/);
+  assert.match(md, /General point about tone\./);
+  assert.ok(!md.includes(' on ""'), "an empty anchor must not be quoted as an empty string");
+});
+
+test("a document referencing comments whose file is missing says so", () => {
+  // Some tools drop comments.xml on save. Silence would look like "there were no comments".
+  const zip = zipOf([
+    ["word/document.xml", `<w:document><w:body><w:p><w:r><w:commentReference w:id="1"/></w:r><w:r><w:t>Body.</w:t></w:r></w:p></w:body></w:document>`],
+  ]);
+  const md = toMarkdown(readDocx(zip).document);
+  assert.match(md, /references comments, but word\/comments\.xml is missing/);
+});
+
+test("a comment's own tracked deletions are excluded", () => {
+  // Same reason as the body: a revised comment would otherwise come out containing both versions.
+  const zip = zipOf([
+    ["word/document.xml", `<w:document><w:body><w:p><w:r><w:commentReference w:id="1"/></w:r><w:r><w:t>x</w:t></w:r></w:p></w:body></w:document>`],
+    ["word/comments.xml", `<w:comments><w:comment w:id="1" w:author="A"><w:p><w:r><w:t>Use </w:t></w:r>
+      <w:del><w:r><w:delText>ten</w:delText></w:r></w:del><w:ins><w:r><w:t>twelve</w:t></w:r></w:ins><w:r><w:t> days.</w:t></w:r></w:p></w:comment></w:comments>`],
+  ]);
+  const md = toMarkdown(readDocx(zip).document);
+  assert.match(md, /Use twelve days\./);
+  assert.ok(!md.includes("ten"), "the deleted wording must not survive");
 });
 
 test("a document with no body text says so rather than returning nothing", () => {

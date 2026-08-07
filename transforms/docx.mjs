@@ -22,7 +22,12 @@ const wanted = (name) =>
   name === "word/document.xml" ||
   name === "word/numbering.xml" ||
   name === "word/_rels/document.xml.rels" ||
-  name === "word/footnotes.xml";
+  name === "word/footnotes.xml" ||
+  // Comments were previously not even fetched from the archive, while the output claimed "Comments are not included" —
+  // technically true and a real gap: a reviewer's comment is frequently the most useful text in a document, and it is the
+  // part someone asking "what needs changing here" actually wants.
+  name === "word/comments.xml" ||
+  name === "word/commentsExtended.xml";
 
 const asText = (buf) => (buf ? buf.toString("utf8") : "");
 
@@ -263,7 +268,24 @@ export function readDocx(buffer) {
     notes.push("This document contains tracked changes. Deleted text was excluded and insertions were kept, so this is the revised version.");
   }
   if (/<w:commentReference\b/.test(documentXml)) {
-    notes.push("Comments are not included.");
+    /**
+     * Comments are READ now, not skipped.
+     *
+     * The note here previously said "Comments are not included" — accurate at the time and a real gap. A reviewer's
+     * comment is frequently the most useful text in a document, and it is exactly what someone asking "what needs
+     * changing" wants. They are collected into their own section with their author, date and the span they point at.
+     */
+    const comments = readComments(asText(files.get("word/comments.xml")));
+    const anchors = commentAnchors(body);
+    const blocks2 = commentBlocks(comments, anchors);
+
+    if (blocks2.length) {
+      blocks.push(...blocks2);
+      notes.push(`${comments.size} comment(s) are collected in a Comments section, with their author and the text they refer to.`);
+    } else if (comments.size === 0) {
+      // References present but no comments file, which happens when a document is saved by a tool that drops it.
+      notes.push("This document references comments, but word/comments.xml is missing, so their text could not be read.");
+    }
   }
 
   const footnotesXml = asText(files.get("word/footnotes.xml"));
@@ -282,6 +304,101 @@ export function readDocx(buffer) {
 
   if (!blocks.length) blocks.push(paragraph("This document contains no readable text."));
   notes.push("Images, charts, headers, footers and formatting are not included.");
-
   return { document: doc(blocks, { notes, source: "docx" }), blocks: blocks.length };
+}
+
+/**
+ * Read the comments file.
+ *
+ * A comment carries an author and a date, and both matter: "this clause is wrong" is a different fact depending on whether
+ * the reviewer was counsel or an intern, and when they said it.
+ *
+ * Deletions inside a comment are stripped for the same reason they are in the body — a comment that was itself revised
+ * would otherwise come out containing both versions.
+ */
+export function readComments(xml) {
+  const out = new Map();
+  if (!xml) return out;
+
+  for (const m of String(xml).matchAll(/<w:comment\b([^>]*)>([\s\S]*?)<\/w:comment>/g)) {
+    const attrs = m[1];
+    const id = (attrs.match(/w:id="(\d+)"/) ?? [])[1];
+    if (id === undefined) continue;
+
+    out.set(id, {
+      id,
+      author: unxml((attrs.match(/w:author="([^"]*)"/) ?? [])[1] ?? "").trim(),
+      initials: unxml((attrs.match(/w:initials="([^"]*)"/) ?? [])[1] ?? "").trim(),
+      // Date to the day only: the time of day is almost never what a reader needs, and a full ISO timestamp is 20
+      // characters of mostly-noise per comment.
+      date: ((attrs.match(/w:date="(\d{4}-\d{2}-\d{2})/) ?? [])[1] ?? ""),
+      text: runText(m[2]),
+    });
+  }
+
+  return out;
+}
+
+/**
+ * The text each comment is anchored to.
+ *
+ * `<w:commentRangeStart w:id="1"/>` … `<w:commentRangeEnd w:id="1"/>` brackets the commented span. Recovering it is what
+ * makes a comment usable: "needs a citation" is nearly meaningless on its own and immediately actionable when you can see
+ * which sentence it points at.
+ *
+ * Ranges can nest and overlap, so each id is matched independently rather than by walking a stack.
+ */
+export function commentAnchors(bodyXml) {
+  const anchors = new Map();
+  const xml = String(bodyXml);
+
+  for (const start of xml.matchAll(/<w:commentRangeStart\b[^>]*w:id="(\d+)"[^>]*\/>/g)) {
+    const id = start[1];
+    const from = start.index + start[0].length;
+
+    // The matching end, found by id rather than by position, because another comment's range may begin in between.
+    const endRe = new RegExp(`<w:commentRangeEnd\\b[^>]*w:id="${id}"[^>]*/>`);
+    const rest = xml.slice(from);
+    const end = rest.search(endRe);
+    if (end === -1) continue;
+
+    const text = runText(rest.slice(0, end));
+    // A zero-length range is a comment on a position rather than on a span; recorded as anchorless rather than empty.
+    if (text.trim()) anchors.set(id, text.trim());
+  }
+
+  return anchors;
+}
+
+/**
+ * Comments as document blocks.
+ *
+ * Collected into their own section rather than inlined at the anchor, following the same reasoning as footnotes: inlining
+ * breaks the sentence the comment interrupts, and a reader looking for review notes can find a section called Comments.
+ *
+ * The anchor is quoted so the comment is self-contained — it can be read without hunting through the body for the span it
+ * refers to.
+ */
+export function commentBlocks(comments, anchors, { maxAnchor = 120 } = {}) {
+  if (!comments.size) return [];
+
+  const items = [];
+  for (const c of comments.values()) {
+    if (!c.text) continue;
+
+    const who = c.author || c.initials || "unknown";
+    const when = c.date ? `, ${c.date}` : "";
+    const anchor = anchors.get(c.id);
+
+    // A long anchor is truncated in the middle: the beginning and end of a quoted span identify it, and a hundred
+    // characters from the middle of a paragraph does not.
+    const quoted = anchor
+      ? ` on "${anchor.length > maxAnchor ? `${anchor.slice(0, maxAnchor / 2)}…${anchor.slice(-maxAnchor / 2)}` : anchor}"`
+      : "";
+
+    items.push(`**${who}**${when}${quoted}: ${c.text}`);
+  }
+
+  if (!items.length) return [];
+  return [heading(2, "Comments"), list(items)];
 }

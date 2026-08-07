@@ -202,7 +202,7 @@ test("notes are MARKED rather than merged into the slide body", () => {
 
 test("read mode is the default and states what it dropped", () => {
   const md = toMarkdown(readPptx(DECK()).document);
-  assert.match(md, /Read mode: slide text, tables and speaker notes are included/);
+  assert.match(md, /Read mode: slide text, tables, speaker notes and review comments are included/);
   assert.match(md, /Layout, geometry, themes, transitions, animations and images are not/);
 });
 
@@ -224,4 +224,93 @@ test("an empty deck says so rather than returning nothing", () => {
 
 test("a missing presentation.xml is an error naming what is missing", () => {
   assert.throws(() => readPptx(zipOf([["ppt/slides/slide1.xml", "<a/>"]])), /ppt\/presentation\.xml is missing/);
+});
+
+// --- slide comments: both formats, and the namespace prefix problem ---------------------------------------
+//
+// A review comment on a slide is frequently the whole point of sending a deck, and neither format was being read.
+
+const DECK_WITH_COMMENTS = () => zipOf([
+  ["ppt/presentation.xml", `<p:presentation><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>`],
+  ["ppt/_rels/presentation.xml.rels", `<Relationships><Relationship Id="rId1" Target="slides/slide1.xml"/></Relationships>`],
+  ["ppt/slides/slide1.xml", slide("Budget", ["Two options"])],
+  // The comment file is comment7.xml for slide1.xml, so matching on the number would find nothing.
+  ["ppt/slides/_rels/slide1.xml.rels", `<Relationships><Relationship Id="rId1" Target="../comments/comment7.xml"/></Relationships>`],
+  ["ppt/commentAuthors.xml", `<p:cmAuthorLst><p:cmAuthor id="1" name="Dana Okafor" initials="DO"/></p:cmAuthorLst>`],
+  ["ppt/comments/comment7.xml", `<p:cmLst><p:cm authorId="1" dt="2026-08-05T14:00:00Z" idx="1">
+    <p:pos x="100" y="200"/><p:text>Option B is over budget.</p:text></p:cm></p:cmLst>`],
+]);
+
+/** The modern form, with an arbitrary namespace prefix and GUID author ids. */
+const DECK_MODERN_COMMENTS = () => zipOf([
+  ["ppt/presentation.xml", `<p:presentation><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>`],
+  ["ppt/_rels/presentation.xml.rels", `<Relationships><Relationship Id="rId1" Target="slides/slide1.xml"/></Relationships>`],
+  ["ppt/slides/slide1.xml", slide("Roadmap", ["Q3 plan"])],
+  ["ppt/slides/_rels/slide1.xml.rels", `<Relationships><Relationship Id="rId1" Target="../comments/modernComment_abc.xml"/></Relationships>`],
+  ["ppt/authors.xml", `<authorLst><author id="{A1-B2}" name="Priya Raman" initials="PR"/><author id="{C3-D4}" name="Sam Vale"/></authorLst>`],
+  ["ppt/comments/modernComment_abc.xml", `<p188:cmLst xmlns:p188="http://x">
+    <p188:cm id="{1}" authorId="{A1-B2}" created="2026-08-06T09:00:00Z">
+      <p188:txBody><a:p><a:r><a:t>Can we </a:t></a:r><a:r><a:t>move this to Q4?</a:t></a:r></a:p></p188:txBody></p188:cm>
+    <p188:cm id="{2}" authorId="{C3-D4}" created="2026-08-06T10:15:00Z" parentId="{1}">
+      <p188:txBody><a:p><a:r><a:t>Yes.</a:t></a:r></a:p></p188:txBody></p188:cm>
+  </p188:cmLst>`],
+]);
+
+test("legacy slide comments are read, with their author and date", () => {
+  const { document, comments } = readPptx(DECK_WITH_COMMENTS());
+  const md = toMarkdown(document);
+
+  assert.equal(comments, 1);
+  assert.match(md, /\*\*Comment\*\* by Dana Okafor, 2026-08-05: Option B is over budget\./);
+  assert.match(md, /## Budget/, "the slide itself is still read");
+});
+
+test("comments are found through the SLIDE's relationships, not by number", () => {
+  // The fixture points slide1 at comment7. Matching on the number would find nothing, and matching the wrong file would
+  // attach another slide's objection — which reads as a real objection to this slide.
+  assert.match(toMarkdown(readPptx(DECK_WITH_COMMENTS()).document), /Option B is over budget/);
+});
+
+test("the MODERN comment format is read too, whatever its namespace prefix", () => {
+  // The prefix is arbitrary: p188, p1510 or anything else depending on which PowerPoint wrote the file. Keying on one
+  // prefix means the reader works on the deck it was tested against and nothing else.
+  const { document, comments } = readPptx(DECK_MODERN_COMMENTS());
+  const md = toMarkdown(document);
+
+  assert.equal(comments, 2);
+  assert.match(md, /by Priya Raman, 2026-08-06/, "GUID author id resolved through authors.xml");
+  assert.match(md, /Can we move this to Q4\?/, "runs joined, since formatting splits a sentence");
+  assert.match(md, /by Sam Vale.*\(reply\): Yes\./, "a reply is marked, because a thread's answer is usually the reply");
+});
+
+test("comments appear on the slide they were left on", () => {
+  // A comment detached from its slide is much less useful, and a comment on the wrong slide is misleading.
+  const md = toMarkdown(readPptx(DECK_WITH_COMMENTS()).document);
+  assert.ok(md.indexOf("## Budget") < md.indexOf("Option B is over budget"), "after the slide's own content");
+});
+
+test("both author files are consulted, since a deck may carry either", () => {
+  // An older deck has commentAuthors.xml only; a recent one has authors.xml. Reading one leaves every comment attributed to
+  // nobody on half of all decks.
+  assert.match(toMarkdown(readPptx(DECK_WITH_COMMENTS()).document), /Dana Okafor/);
+  assert.match(toMarkdown(readPptx(DECK_MODERN_COMMENTS()).document), /Priya Raman/);
+});
+
+test("a deck with no comments says nothing about them", () => {
+  const { comments } = readPptx(DECK());
+  assert.equal(comments, 0);
+  assert.ok(!toMarkdown(readPptx(DECK()).document).includes("**Comment**"));
+});
+
+test("an unattributable comment is still shown", () => {
+  // Losing the reviewer's point because the author file is missing would be the wrong trade.
+  const zip = zipOf([
+    ["ppt/presentation.xml", `<p:presentation><p:sldIdLst><p:sldId r:id="rId1"/></p:sldIdLst></p:presentation>`],
+    ["ppt/_rels/presentation.xml.rels", `<Relationships><Relationship Id="rId1" Target="slides/slide1.xml"/></Relationships>`],
+    ["ppt/slides/slide1.xml", slide("T", ["x"])],
+    ["ppt/slides/_rels/slide1.xml.rels", `<Relationships><Relationship Id="rId1" Target="../comments/comment1.xml"/></Relationships>`],
+    ["ppt/comments/comment1.xml", `<p:cmLst><p:cm authorId="9"><p:text>Needs a source.</p:text></p:cm></p:cmLst>`],
+  ]);
+  const md = toMarkdown(readPptx(zip).document);
+  assert.match(md, /by unknown: Needs a source\./);
 });

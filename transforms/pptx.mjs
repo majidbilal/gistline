@@ -27,7 +27,19 @@ const wanted = (name) =>
   name === "ppt/_rels/presentation.xml.rels" ||
   /^ppt\/slides\/slide\d+\.xml$/.test(name) ||
   /^ppt\/slides\/_rels\/slide\d+\.xml\.rels$/.test(name) ||
-  /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(name);
+  /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(name) ||
+  /**
+   * Any XML in the comments folder, rather than a pattern matching the names I expected.
+   *
+   * My first version required digits before `.xml`, which fails on the real modern filenames — PowerPoint writes
+   * `modernComment_1_A1B2C3.xml`, not `modernComment1.xml`. A test using a realistic name found nothing at all, and the
+   * failure looked like the parser not understanding the format rather than the file never being fetched.
+   *
+   * The folder is the reliable signal; the filename is not.
+   */
+  /^ppt\/comments\/[^/]+\.xml$/.test(name) ||
+  name === "ppt/commentAuthors.xml" ||
+  name === "ppt/authors.xml";
 
 const asText = (buf) => (buf ? buf.toString("utf8") : "");
 
@@ -187,6 +199,9 @@ export function readPptx(buffer, { mode = "read" } = {}) {
   const blocks = [];
   let slides = 0;
   let withNotes = 0;
+  let commentCount = 0;
+  // Authors are presentation-wide, so read once. Both files are passed because a deck may carry either or both.
+  const commentAuthors = readCommentAuthors(asText(files.get("ppt/commentAuthors.xml")), asText(files.get("ppt/authors.xml")));
 
   for (const path of order) {
     const xml = asText(files.get(path));
@@ -212,6 +227,34 @@ export function readPptx(buffer, { mode = "read" } = {}) {
 
     if (slides > 1) blocks.push(rule());
     blocks.push(...readSlide(xml, { number: slides, notes: notesText }));
+
+    /**
+     * Comments on this slide, resolved through the SLIDE's own relationships.
+     *
+     * Same reasoning as speaker notes: `slide3.xml` may reference `comment7.xml`, and matching on the number would attach
+     * another slide's review comments — which is worse than attaching none, because a comment about the wrong slide reads
+     * as a real objection to it.
+     */
+    /**
+     * The comment file for this slide, matched on its FOLDER rather than its filename.
+     *
+     * `Target="([^"]*[Cc]omment\d*\.xml)"` was the first version and it required digits after "Comment", so a real modern
+     * name like `modernComment_1_A1B2C3.xml` never matched. The diagnosis mattered: the parsers were correct, the archive
+     * entries were fetched, and the only broken link was this pattern — which made it look like the format was
+     * unsupported rather than the file never being located.
+     */
+    const commentTarget = (rels.match(/Target="([^"]*\/comments\/[^"]+\.xml)"/) ?? [])[1];
+    const commentPath = commentTarget ? `ppt/comments/${commentTarget.split("/").pop()}` : null;
+
+    if (commentPath && files.has(commentPath)) {
+      const found = readSlideComments(asText(files.get(commentPath)), commentAuthors);
+      if (found.length) {
+        blocks.push(paragraph(found
+          .map((c) => `**Comment** by ${c.author || "unknown"}${c.date ? `, ${c.date}` : ""}${c.reply ? " (reply)" : ""}: ${c.text}`)
+          .join("\n")));
+        commentCount += found.length;
+      }
+    }
   }
 
   if (!slides) blocks.push(paragraph("This presentation contains no readable slides."));
@@ -219,8 +262,73 @@ export function readPptx(buffer, { mode = "read" } = {}) {
   notes.push(
     mode === "preserve"
       ? "Preserve mode is not implemented for presentations; this is a read-mode extraction."
-      : "Read mode: slide text, tables and speaker notes are included. Layout, geometry, themes, transitions, animations and images are not.",
+      : "Read mode: slide text, tables, speaker notes and review comments are included. Layout, geometry, themes, transitions, animations and images are not.",
   );
 
-  return { document: doc(blocks, { notes, source: "pptx" }), slides, withNotes };
+  if (commentCount) {
+    notes.push(`${commentCount} review comment(s) are shown on the slide they were left on, with their author.`);
+  }
+
+  return { document: doc(blocks, { notes, source: "pptx" }), slides, withNotes, comments: commentCount };
+}
+
+/**
+ * Comment authors, in either of the two files PowerPoint uses.
+ *
+ * `commentAuthors.xml` is the older form, keyed by a numeric id; `authors.xml` is the modern one, keyed by a GUID. A deck
+ * saved by a recent PowerPoint has both, and one saved by an older one has only the first — so reading a single file leaves
+ * every comment attributed to nobody on half of all decks.
+ */
+export function readCommentAuthors(legacyXml, modernXml) {
+  const out = new Map();
+
+  for (const m of String(legacyXml ?? "").matchAll(/<p:cmAuthor\b([^>]*)\/?>/g)) {
+    const id = (m[1].match(/id="(\d+)"/) ?? [])[1];
+    const name = unxml((m[1].match(/name="([^"]*)"/) ?? [])[1] ?? "").trim();
+    if (id && name) out.set(id, name);
+  }
+
+  for (const m of String(modernXml ?? "").matchAll(/<author\b([^>]*)\/?>/g)) {
+    const id = (m[1].match(/id="\{?([^"}]+)\}?"/) ?? [])[1];
+    const name = unxml((m[1].match(/name="([^"]*)"/) ?? [])[1] ?? "").trim();
+    if (id && name) out.set(id, name);
+  }
+
+  return out;
+}
+
+/**
+ * Comments on one slide, from either format.
+ *
+ * Legacy: `<p:cm authorId="1" dt="…"><p:text>…</p:text></p:cm>`
+ * Modern: `<p188:cm authorId="{GUID}" created="…"><p188:txBody><a:p><a:r><a:t>…</a:t></a:r></a:p></p188:txBody></p188:cm>`
+ *
+ * The two are matched with one pattern that ignores the namespace prefix, because the prefix is arbitrary — a deck may use
+ * `p188`, `p1510` or something else entirely depending on which PowerPoint wrote it, and keying on one is how a reader works
+ * on the file it was tested against and nothing else.
+ */
+export function readSlideComments(xml, authors) {
+  const out = [];
+  if (!xml) return out;
+
+  for (const m of String(xml).matchAll(/<(?:\w+:)?cm\b([^>]*)>([\s\S]*?)<\/(?:\w+:)?cm>/g)) {
+    const attrs = m[1];
+    const authorId = (attrs.match(/authorId="\{?([^"}]+)\}?"/) ?? [])[1] ?? "";
+    const date = (attrs.match(/(?:dt|created)="(\d{4}-\d{2}-\d{2})/) ?? [])[1] ?? "";
+
+    // Legacy puts the text in `<p:text>`; modern nests it in `<a:t>` runs, split wherever formatting changes.
+    const plain = (m[2].match(/<(?:\w+:)?text\b[^>]*>([\s\S]*?)<\/(?:\w+:)?text>/) ?? [])[1];
+    const runs = [...m[2].matchAll(/<a:t\b[^>]*>([\s\S]*?)<\/a:t>/g)].map((r) => unxml(r[1])).join("");
+    const body = unxml(plain ?? "").trim() || runs.trim();
+    if (!body) continue;
+
+    out.push({
+      author: authors.get(authorId) ?? "",
+      date,
+      text: body.replace(/\s+/g, " "),
+      reply: /parentId=/.test(attrs),
+    });
+  }
+
+  return out;
 }
