@@ -1,13 +1,14 @@
 # Roadmap
 
-What gistline does today, what is coming, and what it will not do. Numbers here are measured by the demos in this
-repository and reproduce with `npm run demo`, `npm run demo-pdf` and `npm run demo-xlsx`.
+What gistline does today, what is coming, and what it will not do. Every figure here is measured by
+[`npm run benchmark`](BENCHMARKS.md) or by the demos in this repository, and reproduces on any machine.
 
-Anything listed under **Coming next** is an intention, not a commitment. Anything under **Not planned** is a decision.
+Anything under **Coming next** is an intention, not a commitment. Anything under **Not planned** is a decision, with the
+reasoning.
 
 ---
 
-## Working now (0.3.x)
+## Working now (0.5.x)
 
 ### Lossless compression
 
@@ -15,20 +16,25 @@ Content is made smaller **without removing anything** before anything is dropped
 
 - **Tables** — an array of like-shaped records becomes a header and rows, so field names are stated once rather than per
   record. **67.9% smaller** on a 300-record API response, with every record present.
-- **Log templates** — each repeated message format stated once, then only the values that vary. **29.2% smaller**, fully
-  reversible.
+- **Log templates with columnar values** — each repeated message format stated once, then the values encoded **column by
+  column**: timestamps as deltas, cycling identifiers as dictionary references, constant columns as run lengths. **67.5%
+  smaller** on a 1,200-line log, fully reversible. Logs now compress as well as JSON, where they used to reach 29%.
+- **Markdown tables** — a table's redundancy is down its columns, not in its headers, so the same columnar encoding
+  applies. The spreadsheet path is now lossless from sheet XML to compressed output.
 - **Running headers and footers** in paginated documents, stated once instead of on every page.
 
 ### Structure-aware lossy reduction
 
-When a document is still over budget, what gets dropped is chosen by something that understands the structure: the
-header stays, every error and warning stays, and ordinary rows go. The combined path fits **1.9x more of a log** into the
-same budget than dropping lines from the start.
+When a document is still over budget, what gets dropped is chosen by something that understands the structure: the header
+stays, every error and warning stays, and ordinary rows go — sampled **round-robin across formats**, so a truncated
+listing shows some of each kind rather than all of the first.
+
+The combined path fits **4.7x more of a log** into the same budget than dropping lines from the start.
 
 ### Honest reporting
 
-Every result says whether anything was removed. "Nothing was removed" and "1,400 rows were dropped" are different facts,
-and both are stated plainly. The original is always retrievable by id.
+Every result states two separate facts: whether anything was **removed**, and whether the original can be **recovered**.
+Conflating them is the failure mode this tool exists to avoid.
 
 ### Documents
 
@@ -37,67 +43,48 @@ Read, converted to Markdown, then compressed — the two stages compound.
 | Format | Status |
 |---|---|
 | **HTML** | headings, lists, tables, links; scripts, styling, navigation and footers discarded |
-| **XLSX** | every sheet as a table; dates as dates, formulas as their cached value, sparse rows placed correctly |
-| **DOCX** | headings, lists, tables, footnotes, hyperlinks; tracked deletions excluded and it says so |
-| **PPTX** | slide titles and body text in presentation order, plus speaker notes |
+| **XLSX** | sheets as tables, dates as dates, formulas as their cached value, cell comments with their author |
+| **DOCX** | headings, lists, tables, footnotes, hyperlinks, and comments with the text they annotate |
+| **PPTX** | slide text in presentation order, speaker notes, and review comments on their own slide |
 | **PDF** | classification, four font-recovery paths, per-page extraction, multi-column ordering, running furniture, tables from alignment |
+| **Images** | OCR via Tesseract when it is installed; a clear refusal when it is not |
 | **ZIP** | read via `node:zlib` alone, with CRC verification and a decompression cap |
+
+**Information is the default output**, not presentation: the reason to read a document is almost always to learn what it
+says. `--preserve` is for when the answer has to go back into a document.
+
+### One command
+
+`gistline run <command>` executes and compresses in one step, and passes through the command's own exit code, so it is
+safe in CI and in a pre-commit hook.
 
 ### Assistant integration
 
-`gistline install` registers with **23 AI coding assistants**. Shared instruction files are spliced, never overwritten,
-and uninstall restores them byte-identically.
+`gistline install` registers with **23 AI coding assistants**, including **pre-tool hooks** on five of them — three by
+settings entry, two by plugin module. Shared instruction files are spliced, never overwritten.
 
-### Compression by content kind
+### Benchmarks
 
-Test output, logs, diffs, JSON and stack traces, with detection and a `--kind` override.
+[`BENCHMARKS.md`](BENCHMARKS.md) measures **fidelity, not just ratio**: every corpus declares needles that must survive,
+and a lost needle fails the build.
 
 ---
 
 ## Coming next
 
-### Columnar encoding of log values
-
-**The largest measured gap.** Logs compress to 29.2% where JSON reaches 67.9%, and the reason is structural: template
-extraction removes the repeated format words, but a timestamp masked as `<ts>` still has to be emitted in the values row,
-so it **moves rather than shrinks**. In a 62-character log line the timestamp is 20 of those characters.
-
-Planned: delta-encode timestamps (`14:22:01` then `+3`, `+5`), dictionary-encode repeated variables, and run-length-encode
-sorted columns. Estimated to reach 60-70%, still lossless.
-
-The same work fixes a second gap: the XLSX pipeline's lossless stage takes 74.2% of the sheet XML, but the compression
-stage that follows is currently the lossy log path, because a Markdown table already states its headers once. A
-table-aware lossless transform would make both stages lossless.
-
-### `gistline run <command>`
-
-Execute a command and compress its output in one action.
-
-This matters more than it sounds. The current flow is two steps — redirect output to a file, then compress the file —
-and **that is why the tool gets skipped**. One command is a habit; two is a decision made every time. It is the
-highest-value missing piece and it is small.
-
-### Pre-tool hooks
-
-Some assistants support a hook that fires before a command runs. On those platforms gistline could prompt automatically
-rather than relying on always-on guidance. The instruction files are written today; the hooks are not.
-
-### Published benchmarks
-
-A committed corpus with a reproducible harness — including the cases where gistline does badly, because a benchmark
-showing only wins is marketing.
-
-Critically, it must measure **fidelity, not just ratio**. A 100% saving that drops the one failing test is a bug, not a
-win. Every corpus file will carry **needles** — the failing assertion, the stack frame, the error line — and the harness
-will assert every needle survives.
-
 ### Better handling of ordinary text
 
-**The honest weak spot.** Content with no errors and no structure — plain prose, a CSV export, an `npm install` log — has
-nothing to latch onto, so gistline keeps the start and the end. That works and is blunt.
+**The honest weak spot.** Content with no errors and no structure — plain prose, an `npm install` log — has nothing to
+latch onto, so gistline keeps the start and the end. That works and is blunt.
 
-Planned: strategies that understand **CSV/TSV** (keep the header and a representative sample), **install logs** (keep
-what changed and what warned), and **prose** (keep opening, closing, and the parts that carry information).
+Planned: strategies that understand **install logs** (keep what changed and what warned) and **prose** (keep opening,
+closing, and the parts that carry information). CSV is now handled by the columnar path.
+
+### Preserve mode for documents
+
+The flag exists and is honoured by the writer, so a document's tables and headings come back in full Markdown. But
+`preserve` is **not implemented for PDF or PowerPoint**, and both say so plainly rather than silently behaving as read
+mode. Building it properly means recording what read mode deliberately drops.
 
 ### More accurate token counts
 
@@ -106,33 +93,35 @@ Likely answer: keep the estimate, and make the arithmetic configurable for anyon
 
 ### Streaming for very large inputs
 
-Everything is currently read into memory. Fine for a build log, wrong for a multi-gigabyte one.
+Everything is read into memory. Fine for a build log, wrong for a multi-gigabyte one.
 
-### Preserve mode for documents
+### PDF preserve mode and table confidence
 
-Reading is optimised for extracting information rather than rebuilding a document, which is almost always what is wanted.
-`mode: "preserve"` is accepted today and **says plainly that it is not implemented** rather than silently behaving as read
-mode. Building it properly means recording what read mode deliberately drops.
+PDF tables are inferred from alignment and labelled as inferred. A confidence score per table would let a caller decide
+whether to trust one, rather than treating all inferred tables alike.
 
 ---
 
 ## Not planned, and why
 
-### OCR
+### A bundled OCR model
 
-A scanned page has no text layer, and reading it needs a model — which would end the zero-dependency guarantee that makes
-gistline usable as a build gate. gistline detects the case and refuses with the reason.
+gistline **uses Tesseract when it is installed** and refuses cleanly when it is not. It will never bundle one: reading a
+scanned page needs a model, and shipping one would end the zero-dependency guarantee that makes this usable as a build
+gate.
 
-**Related and firmly excluded:** guessing a font mapping from letter frequencies. It would produce fluent, confident,
-wrong text — the worst possible output, because nothing downstream could detect it.
+The rule is: adopt the idea, never the code. An external tool may be an **optional adapter that never degrades behaviour
+when absent** — with Tesseract missing, every path behaves exactly as it did before OCR existed.
+
+**Firmly excluded:** guessing a font mapping from letter frequencies. It would produce fluent, confident, wrong text —
+the worst possible output, because nothing downstream could detect it.
 
 ### A trained compression model
 
 Tools using one get better results on prose. They also need a large install, a warm-up, and produce results that can
-differ between machines. gistline is deterministic and instant, and that is the deliberate trade. For model-quality
-compression of prose, use a tool built for it.
+differ between machines. gistline is deterministic and instant, and that is the deliberate trade.
 
-### A proxy that sits between an assistant and its tools
+### A proxy between an assistant and its tools
 
 Compressing another tool's output requires either that tool calling gistline, or a proxy intercepting everything. A proxy
 is a different product with a much larger surface, and it would not be zero-dependency.
@@ -161,8 +150,14 @@ change.
 
 **Major** — a change to the contract: the shape of a result, the meaning of a note, or the removal of a command.
 
-The `applied` and `lossy` fields in a result are part of the contract. A stage that changes from lossless to lossy, or
-the reverse, is a major change even if the output looks similar — because the guarantee is the product.
+The `applied` and `lossy` fields are part of that contract. A stage changing from lossless to lossy, or the reverse, is a
+major change even if the output looks similar — because **the guarantee is the product**.
+
+### Why not 1.0 yet
+
+The published surface is still moving: `--preserve`, `gistline run` and the wording of the compression note all changed
+in 0.5.0. 1.0 is a promise about stability, and that promise is worth making only after the surface has sat unchanged for
+a while.
 
 ---
 

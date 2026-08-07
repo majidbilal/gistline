@@ -36,11 +36,11 @@ list, not because any transform checks. No individual transform can get the rule
 
 | | Count |
 |---|---|
-| Source modules | 34 |
-| Source lines | 8,494 |
+| Source modules | 35 |
+| Source lines | 8,829 |
 | Test files | 29 |
-| Import edges across the repo | 215 |
-| Distinct symbols | 1,055 |
+| Import edges across the repo | 221 |
+| Distinct symbols | 1,079 |
 | Runtime dependencies | **0** |
 | Node built-ins used | node:assert/strict, node:child_process, node:crypto, node:fs, node:os, node:path, node:test, node:url, node:zlib |
 
@@ -50,9 +50,9 @@ What a caller touches. Everything below is reachable from here and nothing here 
 
 | Module | Lines | Imports | Imported by |
 |---|---|---|---|
-| [`cli.mjs`](../cli.mjs) | 269 | 4 | — |
-| [`index.mjs`](../index.mjs) | 415 | 3 | 3 |
-| [`install.mjs`](../install.mjs) | 499 | — | 1 |
+| [`cli.mjs`](../cli.mjs) | 376 | 4 | — |
+| [`index.mjs`](../index.mjs) | 431 | 3 | 3 |
+| [`install.mjs`](../install.mjs) | 619 | — | 1 |
 | [`mcp.mjs`](../mcp.mjs) | 284 | 2 | — |
 
 ## core/
@@ -86,7 +86,7 @@ One transformation each. A transform never decides whether it should run — the
 | [`transforms/pdf.mjs`](../transforms/pdf.mjs) | 240 | 6 | 1 |
 | [`transforms/pptx.mjs`](../transforms/pptx.mjs) | 335 | 2 | 1 |
 | [`transforms/tables.mjs`](../transforms/tables.mjs) | 47 | 1 | 1 |
-| [`transforms/templates.mjs`](../transforms/templates.mjs) | 418 | 4 | 1 |
+| [`transforms/templates.mjs`](../transforms/templates.mjs) | 457 | 4 | 1 |
 | [`transforms/xlsx.mjs`](../transforms/xlsx.mjs) | 396 | 2 | 1 |
 
 ## util/
@@ -177,4 +177,4 @@ Tests sit beside the module they test: `core/pipeline.mjs` has `core/pipeline.te
 
 ---
 
-*34 source modules · regenerate with `npm run architecture`*
+*35 source modules · regenerate with `npm run architecture`*

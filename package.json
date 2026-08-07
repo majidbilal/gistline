@@ -1,6 +1,6 @@
 {
   "name": "gistline",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Compress large command output, logs and documents before an AI assistant reads them - and know whether anything was removed. Zero dependencies, deterministic, with the original always retrievable.",
   "type": "module",
   "license": "MIT",
@@ -91,8 +91,9 @@
     "demo-pdf": "node scripts/demo-pdf.mjs",
     "demo-xlsx": "node scripts/demo-xlsx.mjs",
     "verify-package": "npm pack && node scripts/smoke.mjs",
-    "prepublishOnly": "npm test && npm run check-claims && npm run benchmark && npm run smoke",
+    "prepublishOnly": "npm test && npm run check-claims && npm run check-docs && npm run benchmark && npm run smoke",
     "architecture": "node scripts/make-architecture.mjs",
-    "benchmark": "node scripts/benchmark.mjs"
+    "benchmark": "node scripts/benchmark.mjs",
+    "check-docs": "node scripts/check-docs.mjs"
   }
 }

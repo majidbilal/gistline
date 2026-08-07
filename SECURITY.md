@@ -9,8 +9,21 @@ Include the input that triggers it and what happens. A reproducing file is worth
 
 ## Scope, and what to think about first
 
-gistline has **no dependencies, makes no network calls, and runs no code from the content it reads.** That removes most
-of the usual surface. What remains is worth naming precisely.
+gistline has **no dependencies and makes no network calls.** That removes most of the usual surface. What remains is worth
+naming precisely.
+
+### It runs two things, and both are on your instruction
+
+**`gistline run <command>` executes the command you give it.** That is the feature. It does not parse, rewrite or sanitise
+the command — the thing that runs is the thing you typed — and it passes through the command's exit code. Do not pass it a
+command assembled from untrusted input, for the same reason you would not pass one to a shell.
+
+**OCR spawns Tesseract, if you have it installed.** gistline does not bundle, download or install it, and with Tesseract
+absent nothing is spawned at all. When present it is invoked with a temporary file and a fixed argument list; the file is
+removed afterwards, including if recognition fails.
+
+Set `GISTLINE_TESSERACT` to control which binary is used. A value pointing at something unexpected will be executed, so
+treat it as you would `PATH`.
 
 ### Untrusted content is untrusted after conversion too
 
@@ -56,8 +69,9 @@ output can be reversed. That means **compressed content is on disk in full**.
 ### What is deliberately absent
 
 - **No telemetry, no analytics, no network calls.** There is nothing to opt out of.
-- **No code execution.** gistline reads bytes and writes text. It does not evaluate content, run macros, or follow
-  references out of a document.
+- **No code execution from content.** gistline reads bytes and writes text. It does not evaluate a document's contents, run
+  macros, or follow references out of a document. The only processes it starts are the one you name with `run` and, if you
+  have it, Tesseract.
 - **No credential handling.** It has none to leak.
 
 ## Supported versions

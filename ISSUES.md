@@ -8,38 +8,34 @@ An issue here is not a promise to fix it. Several are trade-offs kept on purpose
 
 ## Compression
 
-### Logs compress far less than JSON
-
-**29.2% against 67.9%**, and the gap is structural rather than a tuning problem.
-
-Template extraction removes the repeated format words, but a timestamp masked as `<ts>` still has to be emitted in the
-values row — so it **moves rather than shrinks**. In a 62-character log line the timestamp is 20 of those characters and
-templating cannot touch them.
-
-**Fix:** column-wise encoding of the values row. Delta-encode timestamps (`14:22:01` then `+3`, `+5`), dictionary-encode
-repeated variables (a worker id appearing 150 times becomes a short reference plus a legend), and run-length-encode
-sorted columns. Estimated to reach 60-70%, still lossless. Not built.
-
-### The XLSX second stage is lossy, and should not be
-
-The conversion is lossless and takes 74.2% of the sheet XML. The compression stage that follows is currently the **lossy
-log path**, because a Markdown table already states its headers once — so the redundancy `toTable()` removes was already
-gone, and the remaining reduction comes from dropping rows.
-
-**Fix:** a Markdown-table-aware lossless transform, using the same columnar encoding the log gap needs.
-
 ### Prose barely compresses
 
 There is no repeated structure to state once, so gistline falls back to keeping the start and the end. That works and is
-blunt. Tools using a trained model do better here; that is the trade zero dependencies buys.
+blunt. The benchmark keeps a prose row precisely so this is visible rather than hidden.
+
+Tools using a trained model do better here; that is the trade zero dependencies buys.
 
 ### `headTail` overshoots its budget
 
 By roughly 50 characters, because the elision marker it inserts is not counted against the budget. A 400-character budget
 yields 452.
 
-Pre-existing and consistent across both the current and the previous code path, so it is a bug rather than a regression.
-There is a test asserting the overshoot stays bounded, which will fail if it grows.
+Pre-existing and consistent across every code path, so it is a bug rather than a regression. There is a test asserting the
+overshoot stays bounded, which will fail if it grows.
+
+### Columnar output is not human-readable
+
+The columnar form stores values by column, so a value is reconstructible but **not literally visible**. Interesting lines
+— anything `rank` considers a failure, error or warning — are deliberately kept verbatim for exactly this reason, and the
+columnar form is only chosen when it fits the budget outright.
+
+But an ordinary value in a columnar block cannot be grepped for. If you need to search the output rather than the
+original, use `gistline retrieve <id>` and search that.
+
+### Token counts are estimated, not measured
+
+Characters are a proxy for tokens, at roughly 3.6 characters each. A real tokeniser would be exact and would be a
+dependency. The estimate is deliberately conservative, but it is an estimate.
 
 ---
 
@@ -50,8 +46,8 @@ There is a test asserting the overshoot stays bounded, which will fail if it gro
 Single-column pages follow the page's own drawing order and are reliable. Multi-column order is derived from the gutter
 between columns, and **an inferred order can be wrong in ways that read perfectly**.
 
-Every extraction reports its basis, so a caller can decide how much to trust the sequence. Genuinely interleaved layouts
-— marginalia, glosses, sidebars — are underdetermined by geometry alone and no amount of tuning fixes that.
+Every extraction reports its basis, so a caller can decide how much to trust the sequence. Genuinely interleaved layouts —
+marginalia, glosses, sidebars — are underdetermined by geometry alone and no amount of tuning fixes that.
 
 ### Tables are inferred from alignment
 
@@ -61,21 +57,20 @@ alignment, which works well for regular grids and less well for merged cells, ne
 Suspected merged cells are **reported** rather than guessed at. Ruling lines are not read, because a border is a
 path-drawing operator and plenty of real tables have none while plenty of bordered boxes are not tables.
 
-### No OCR, and no plan for one
+There is no per-table confidence score, so a caller cannot tell a clean grid from a marginal one. That is on the roadmap.
 
-A scanned page has no text layer. Reading it requires a model, which would end the zero-dependency guarantee. gistline
-detects the case and refuses with the reason.
+### Preserve mode is not implemented for PDF or PowerPoint
 
-The same applies to a font with arbitrary glyph ids and no character mapping anywhere: the page is skipped by number
-rather than emitting glyph numbers as words.
+`mode: "preserve"` is accepted and **says plainly that it is not implemented** for these two, rather than silently
+behaving as read mode. HTML, DOCX and XLSX honour it.
 
-**Deliberately not attempted:** guessing a font mapping from letter frequencies. It would produce fluent, confident,
-wrong text — the single worst output this tool could emit, because nothing downstream could detect it.
+### A scanned PDF needs rasterising before OCR
 
-### Preserve mode is not implemented
+gistline uses Tesseract when installed, but Tesseract reads **images, not PDFs**. A scanned PDF must be turned into images
+first (`pdftoppm` from Poppler, or ImageMagick), and the refusal says so rather than sending someone to a tool that cannot
+do the job alone.
 
-Reading is optimised for extracting information, not for rebuilding a document. `mode: "preserve"` is accepted and
-**says plainly that it is not implemented** rather than silently behaving as read mode.
+Rasterising a PDF ourselves would require a rendering engine, which is not a zero-dependency proposition.
 
 ---
 
@@ -89,53 +84,55 @@ mapping returns a different string, and `/ActualText` overrides what an extracto
 gistline **flags the mechanism** when present but cannot judge intent, and the mechanism has legitimate accessibility
 uses. See [SECURITY.md](SECURITY.md).
 
-### Word documents: comments and revision history are not read
+### OCR output contains errors
 
-Comments are excluded, and the output says so. Tracked deletions are excluded and insertions kept, so the result is the
-revised document — also stated.
+Where Tesseract is used, the output says so and warns that anything mattering should be verified against the image.
+Layout, tables and reading order are not recovered — it is the text Tesseract found, in the order it found it.
 
 ### Spreadsheets: charts, images and cell formatting are not read
 
-Stated in the output. Formula cells yield their last calculated value, which is what a reader wants but is not the same
-as the formula.
+Stated in the output. Formulas yield their last calculated value, which is what a reader wants but is not the same as the
+formula.
+
+### Word: revision history beyond the current state is not read
+
+Tracked deletions are excluded and insertions kept, so the result is the revised document — and it says so. The history of
+who changed what, and when, is not reconstructed.
 
 ---
 
 ## Tooling
 
-### `gistline run <command>` does not exist yet
+### Hooks reach five platforms, guidance reaches all 23
 
-The current flow is two steps: run a command redirecting output, then compress the file. **That is why the tool gets
-skipped** — one command is a habit, two is a decision made every time.
+`gistline install` writes a **pre-tool hook** for Claude Code, Gemini CLI and CodeBuddy by settings entry, and for
+OpenCode and Kilo Code by plugin module. It **advises rather than rewrites**: silently altering a command means the thing
+that runs is not the thing that was decided, and it breaks on redirections and multi-command lines.
 
-**Fix:** a wrapper that executes and compresses in one action. This is the highest-value missing piece.
+On the remaining eighteen platforms gistline is always-on guidance in a skill, rule or instruction file rather than an
+automatic prompt. Opt out of hooks with `gistline install --no-hooks`.
 
-### No published benchmark
+### The benchmark corpus is generated, not real-world
 
-The numbers in the README are measured by the demos in this repository and reproduce exactly, but there is no shared
-harness, no committed corpus, and — more importantly — **no measurement of fidelity**. A 100% saving that drops the one
-failing test is a bug, not a win.
+Every corpus in [`scripts/benchmark.mjs`](scripts/benchmark.mjs) is built from source so the figures are reproducible and
+reviewable in a diff. That also means they are *representative* rather than *real* — a corpus of genuine build logs from
+several projects would be better evidence.
 
-**Fix:** a corpus committed to the repository with **needles** per file (the failing assertion, the stack frame, the error
-line) and a check that every needle survives. Including the cases where gistline does badly, because a benchmark showing
-only wins is marketing.
+**A corpus that compresses badly is the most useful thing you can send.** See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-### The installer writes hooks for three platforms, not all five
+### No comparison against other tools
 
-`gistline install` writes a **pre-tool hook** for Claude Code, Gemini CLI and CodeBuddy, which advises before a command
-likely to produce large output. It **advises rather than rewrites**: silently altering a command means the thing that runs
-is not the thing that was decided, and it breaks on redirections and multi-command lines.
+Their corpora and budgets differ, and a table built to flatter one tool is worth nothing. Run `npm run benchmark` on your
+own content instead.
 
-**OpenCode and Kilo Code** expose their equivalent through a *plugin module* rather than a settings entry, which is a
-different integration shape and is not built. On those two, and on the remaining eighteen platforms, gistline is
-always-on guidance in a skill, rule or instruction file rather than an automatic prompt.
+### Everything is read into memory
 
-Opt out of hooks entirely with `gistline install --no-hooks`, which keeps the instruction and leaves your settings file
-untouched.
+Fine for a build log, wrong for a multi-gigabyte one. Streaming is on the roadmap.
 
 ---
 
 ## Reporting something not listed here
 
 A corpus that compresses badly is the most useful thing you can send. A case where gistline **removed something it should
-have kept** is the most important. See [CONTRIBUTING.md](CONTRIBUTING.md).
+have kept** is the most important — that is the failure this project cares about most, and the hardest to find from the
+inside. See [CONTRIBUTING.md](CONTRIBUTING.md).

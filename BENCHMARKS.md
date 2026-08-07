@@ -46,14 +46,14 @@ Where something *was* removed, the original remains retrievable by id — so the
 
 | Corpus | Time |
 |---|---|
-| Test suite, one failure | 69.5ms |
-| Build log, six formats | 102.6ms |
-| JSON API response, 300 records | 47.6ms |
-| Stack trace, 300 frames | 10.9ms |
-| Unified diff, 500 lines | 17.6ms |
-| Scraped HTML article | 19.3ms |
-| Plain prose (gistline does badly) | 2.1ms |
-| CSV export, 400 rows | 47.5ms |
+| Test suite, one failure | 32.4ms |
+| Build log, six formats | 58.3ms |
+| JSON API response, 300 records | 23.3ms |
+| Stack trace, 300 frames | 4.7ms |
+| Unified diff, 500 lines | 8.8ms |
+| Scraped HTML article | 11.5ms |
+| Plain prose (gistline does badly) | 1.3ms |
+| CSV export, 400 rows | 29.8ms |
 
 Deterministic and dependency-free: no model to load, no warm-up, and the same input produces byte-identical output on
 every run. That is what makes it usable in a pre-commit hook.

@@ -4,7 +4,7 @@
 anything was thrown away.**
 
 [![npm](https://img.shields.io/npm/v/gistline?color=0b7285&label=npm)](https://www.npmjs.com/package/gistline)
-[![tests](https://img.shields.io/badge/tests-379%20passing-1f6f43)](#how-it-is-tested)
+[![tests](https://img.shields.io/badge/tests-502%20passing-1f6f43)](#how-it-is-tested)
 [![dependencies](https://img.shields.io/badge/dependencies-0-1f6f43)](#zero-dependencies-is-the-point)
 [![node](https://img.shields.io/badge/node-%E2%89%A520.15-333333)](#requirements)
 [![licence](https://img.shields.io/badge/licence-MIT-333333)](LICENSE)
@@ -74,16 +74,16 @@ fails exactly when `npm test` fails.
 ```
 $ npm test 2>&1 | npx gistline --kind test --label suite
 
-[suite output compressed: 69,567 → 131 chars. Nothing was deleted — request the verbatim output if you
- need a dropped detail.]
-[compressed: 758 passing lines omitted]
+[suite output compressed: 91,921 → 132 chars. Full output retained as id 092d1b24d287fa0a
+ — retrieve, slice, or grep it for any dropped detail.]
+[compressed: 1004 passing lines omitted]
 
-# tests 379
-# pass 379
+# tests 502
+# pass 502
 # fail 0
 ```
 
-The 758 passing lines are gone. **The failures never are** — and the original is retrievable by id, so nothing is
+The 1,004 passing lines are gone. **The failures never are** — and the original is retrievable by id, so nothing is
 actually lost.
 
 ---
@@ -135,7 +135,7 @@ gistline slice    dd0fd19eb38f9210 --from-line 400 --lines 50
 gistline grep     dd0fd19eb38f9210 "AssertionError"
 ```
 
-That is what makes aggressive compression safe. The 758 dropped test lines are one command away.
+That is what makes aggressive compression safe. The 1,004 dropped test lines are one command away.
 
 ---
 
@@ -148,16 +148,28 @@ at.
 | Format | What is read |
 |---|---|
 | **HTML** | headings, lists, tables, links; scripts, styling, navigation and footers discarded |
-| **XLSX** | every sheet as a table, with dates as dates rather than serial numbers |
-| **DOCX** | headings, lists, tables, footnotes, hyperlinks; tracked deletions excluded |
-| **PPTX** | slide titles and body text in presentation order, plus speaker notes |
+| **XLSX** | every sheet as a table, dates as dates rather than serial numbers, cell comments with their author |
+| **DOCX** | headings, lists, tables, footnotes, hyperlinks, and comments with the text they annotate |
+| **PPTX** | slide titles and body text in presentation order, speaker notes, and review comments |
 | **PDF** | text, tables recovered from alignment, running headers stated once |
+| **Images** | OCR via Tesseract when it is installed; a clear refusal, with the reason, when it is not |
 | **ZIP** | the archive's contents, listed and extractable |
 
 ```
 gistline --file report.pdf
 gistline --file quarterly.xlsx --budget 4000
 gistline --file scraped-page.html
+```
+
+**Comments are read, not skipped.** A reviewer's comment is frequently the most useful text in a document — it is what
+someone asking "what needs changing here" actually wants — so it comes back with its author, its date, and **the span it
+points at**:
+
+```
+## Comments
+
+- **Priya Raman**, 2026-08-05 on "The supplier shall not subcontract.":
+  Does this survive a change of control?
 ```
 
 **It reads for information, not for reconstruction.** The default assumes you want to know what a document says, so the
@@ -205,17 +217,20 @@ first, where a built-in file reader loads the whole thing uncompressed.
 
 ```
 $ gistline --file scan.pdf
-"scan.pdf": PDF 1.4 · 40 page(s) · scanned — no text operators and 40 image draws:
-this is a scan and needs OCR. Run it through an OCR tool first and gistline will
-compress the result.
+"scan.pdf": PDF 1.4 · 40 page(s) · scanned — no text operators and 40 image draw(s)
+in uncompressed content: this is a scan. It needs OCR. gistline will use Tesseract if
+it is installed, but a PDF must also be turned into images first (pdftoppm from
+Poppler, or ImageMagick).
 ```
 
 Every refusal names the format, the reason, and what would fix it:
 
-- **A scanned PDF** needs OCR, which needs a model. gistline stays dependency-free, so it declines and says so.
+- **A scanned PDF** needs OCR *and* rasterising first — Tesseract reads images, not PDFs — so the refusal names
+  `pdftoppm` rather than sending you to a tool that cannot do the job alone.
+- **An image** is read with Tesseract if you have it, and refused with the reason if not. Either way the refusal notes the
+  useful fact: an image's token cost is driven by its **pixel dimensions**, so resizing before sending reduces cost
+  directly, with no OCR involved at all.
 - **A `.doc`** is a pre-2007 binary container, not a ZIP of XML. Re-save it as `.docx`.
-- **An image** cannot be read without OCR — and its token cost is driven by pixel dimensions, so resizing it before
-  sending reduces cost directly.
 - **An ordinary ZIP** is refused rather than concatenated, because joining forty files produces text that reads
   plausibly and means nothing.
 - **A page whose fonts carry no character mapping** is skipped by page number, because the extracted text would be
@@ -341,7 +356,7 @@ warm-up, and results that can differ between machines. gistline makes the opposi
 
 ## How it is tested
 
-**379 tests, and the ones that matter assert what was NOT lost.**
+**502 tests, and the ones that matter assert what was NOT lost.**
 
 Every lossless transform has a reverse function and a round-trip test, because "lossless" is otherwise an adjective
 rather than a claim. The round-trips caught bugs that reading the code did not:
@@ -352,13 +367,25 @@ rather than a claim. The round-trips caught bugs that reading the code did not:
 - values were transposed, because applying patterns in sequence cannot preserve appearance order
 - an encoded `null` vanished entirely
 
-Documented limitations are **tested**, so they cannot quietly change. Table compaction preserves every key and value
-but not per-row key order — there is a test asserting exactly that, which will fail if someone makes it
-order-preserving without updating the documentation.
+**And the benchmark measures fidelity, not just ratio.** [`BENCHMARKS.md`](BENCHMARKS.md) runs eight corpora — including
+one gistline does badly on — and every corpus declares **needles** that must still be literally present. A lost needle
+fails the build.
+
+That check found three real bugs on its first run, including a compression note that said *"nothing was deleted"* while a
+third of the rows had been dropped.
+
+Documented limitations are **tested**, so they cannot quietly change. Table compaction preserves every key and value but
+not per-row key order — there is a test asserting exactly that, which will fail if someone makes it order-preserving
+without updating the documentation.
 
 ```
-npm test
+npm test              the suite
+npm run benchmark     compression and fidelity
+npm run check-claims  this README against the code
+npm run smoke         the packed tarball, installed clean
 ```
+
+All four run in CI across Linux, macOS and Windows, and again before publishing.
 
 ---
 

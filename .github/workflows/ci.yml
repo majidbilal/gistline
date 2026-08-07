@@ -45,11 +45,15 @@ jobs:
 
       - run: npm test
 
-      # Documentation drift is a bug. This checks the platform count, the engine floor across the badge, the table and
-      # package.json, every command shown, every internal link, and that every file listed in `files` exists. It has
-      # already caught three wrong claims, including an engines range the code could not honour.
+      # Documentation drift is a bug. `check-claims` verifies the README against the code; `check-docs` sweeps every document
+      # for figures that were true once and are not now — the failure mode being a reader who believes a number nobody
+      # updated. Between them they have caught the platform count, an engines range the code could not honour, and a sample
+      # output showing a note format the tool no longer produces.
       - name: Verify the README's claims against the code
         run: npm run check-claims
+
+      - name: Verify every document against the current code
+        run: npm run check-docs
 
       # The benchmark measures FIDELITY, not just ratio: every corpus declares needles that must survive, and a lost needle
       # fails the build. A 100% saving that drops the one failing test is a bug, not a win — and this check has already found
