@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { adviseFor, extractCommand } from "../hooks/pre-tool.mjs";
+import gistlinePlugin from "../hooks/plugin.mjs";
 import { mergeHook, unmergeHook, HOOK_TARGETS, PLATFORMS, contentFor, findPlatform, spliceBlock, removeBlock } from "../install.mjs";
 
 // The hook, and the installer's handling of shared files.
@@ -235,4 +236,77 @@ test("every platform receives the fetch and mode guidance, not just one", () => 
     assert.match(body, /curl -sL/, `${p.id} is missing the fetch guidance`);
     assert.match(body, /--preserve/, `${p.id} is missing the mode guidance`);
   }
+});
+
+// --- plugin-based hooks: OpenCode and Kilo Code -------------------------------------------------------------
+//
+// A genuinely different integration shape, not a different protocol on the same one: these hosts import a MODULE and call an
+// exported function, so there is no process to spawn, no stdin and no stdout. Both were recorded in ISSUES.md as not built
+// while the other three worked, because claiming support that does not exist is worse than naming the gap.
+
+test("the plugin exposes the SAME advice as the command hook", () => {
+  // Two copies of that judgement drifting apart is how one platform nags about `git status` while another stays quiet, so the
+  // plugin imports the rule rather than restating it.
+  const handlers = gistlinePlugin();
+  const handler = handlers["tool.execute.before"];
+  assert.equal(typeof handler, "function");
+});
+
+test("the plugin advises on a noisy command and stays silent otherwise", async () => {
+  const handler = gistlinePlugin()["tool.execute.before"];
+
+  const noisy = await handler({}, { tool_input: { command: "npm test" } });
+  assert.ok(noisy?.additionalContext, "a test run should get advice");
+  assert.match(noisy.additionalContext, /npx gistline/);
+
+  const quiet = await handler({}, { tool_input: { command: "git status" } });
+  assert.equal(quiet, undefined, "an ordinary command should get nothing at all");
+});
+
+test("the plugin tolerates BOTH call signatures", async () => {
+  // Hosts differ: some pass (input, output), some pass a single object. A plugin that throws on an unexpected shape would
+  // interrupt real work, and tolerating both costs three lines.
+  const handler = gistlinePlugin()["tool.execute.before"];
+
+  assert.ok(await handler({ tool_input: { command: "npm test" } }), "single-argument form");
+  assert.ok(await handler({}, { tool_input: { command: "npm test" } }), "two-argument form");
+  assert.doesNotThrow(() => handler(undefined, undefined), "no arguments at all must not throw");
+});
+
+test("the plugin writes onto the output object as well as returning", async () => {
+  // Hosts differ in which they read, and doing both costs nothing.
+  const output = { tool_input: { command: "npm test" }, metadata: {} };
+  await gistlinePlugin()["tool.execute.before"]({}, output);
+  assert.match(output.gistline, /npx gistline/);
+  assert.match(output.metadata.gistline, /npx gistline/);
+});
+
+test("a plugin platform installs a MODULE and a config entry, merging the config", () => {
+  // opencode.json holds the user's own configuration. Replacing it would be as bad here as replacing a settings.json.
+  const existing = { model: "claude", plugin: ["./other/plugin.mjs"] };
+  const entry = HOOK_TARGETS.opencode.build().plugin[0];
+
+  const current = existing.plugin;
+  const merged = { ...existing, plugin: current.includes(entry) ? current : [...current, entry] };
+
+  assert.equal(merged.model, "claude", "unrelated config must survive");
+  assert.deepEqual(merged.plugin, ["./other/plugin.mjs", entry], "the other plugin must remain, ours appended");
+});
+
+test("both plugin platforms declare a module path and a config path", () => {
+  // A plugin platform with no module path would write a config entry pointing at nothing.
+  for (const id of ["opencode", "kilo"]) {
+    const t = HOOK_TARGETS[id];
+    assert.equal(t.kind, "plugin", `${id} should be a plugin platform`);
+    assert.ok(t.pluginFile && t.pluginProject, `${id} needs a module path for both scopes`);
+    assert.ok(t.file && t.project, `${id} needs a config path for both scopes`);
+    assert.match(t.build().plugin[0], /gistline\.mjs$/, `${id}'s config entry should name the module`);
+  }
+});
+
+test("all five hook platforms are declared, and none claims support it lacks", () => {
+  // The check that catches a platform flagged for hooks with no target, which would claim support that does not exist.
+  const flagged = PLATFORMS.filter((p) => p.hooks).map((p) => p.id).sort();
+  assert.deepEqual(flagged, ["claude", "codebuddy", "gemini", "kilo", "opencode"]);
+  assert.deepEqual(flagged, Object.keys(HOOK_TARGETS).sort());
 });

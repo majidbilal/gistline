@@ -189,7 +189,23 @@ export const templates = {
      */
     const rowForm = render(found);
     const columnForm = renderColumnar(found);
-    const useColumns = columnForm.length < rowForm.length;
+
+    /**
+     * COLUMNAR ONLY WHEN IT FITS. Otherwise the row form, which the lossy step understands.
+     *
+     * `template-rows` reduces output by dropping lines. In the row form a line is one log line, so dropping some is exactly
+     * right. In the COLUMNAR form a line is a whole encoded block of two hundred rows — so dropping "2 ordinary rows" threw
+     * away four hundred lines of data and the header with them.
+     *
+     * The benchmark's fidelity check found it: every needle vanished from a corpus reported as 78.5% compressed. The
+     * compression was real and the output was unusable.
+     *
+     * So the choice is not simply "whichever is smaller". Columnar wins when it fits the budget outright, because then
+     * nothing downstream needs to cut it. When it does not fit, the row form is chosen even though it is larger, because a
+     * form the next stage can reduce safely beats a smaller one it can only destroy.
+     */
+    const columnFits = columnForm.length <= ctx.budget;
+    const useColumns = columnFits && columnForm.length < rowForm.length;
     const rendered = useColumns ? columnForm : rowForm;
 
     // Never larger. A compressor that inflates is worse than one that declines, and the design missed this until a
@@ -264,11 +280,34 @@ export const templateRows = {
       used += row.length + 1;
     }
 
-    // Then ordinary rows from the START, so the beginning of the run is intact and readable.
-    for (const { row, i } of ordinary) {
-      if (used + row.length + 1 > available) break;
-      chosen.set(i, row);
-      used += row.length + 1;
+    // Then ordinary rows, ROUND-ROBIN ACROSS TEMPLATES rather than in file order.
+    //
+    // Taking them in order fills the budget from the first template group and drops the rest entirely — so a CSV whose
+    // region-3 rows all happened to share one template lost every single one of them, while region-0 kept a hundred. The
+    // benchmark's fidelity check found it: a value present a hundred times in the input was absent from the output.
+    //
+    // Round-robin keeps a representative sample of every format present, which is what a reader needs from a truncated
+    // listing — "here is some of each" rather than "here is all of the first kind".
+    const byTemplate = new Map();
+    for (const item of ordinary) {
+      const id = (item.row.match(/^[TV](\d+)/) ?? [, "?"])[1];
+      if (!byTemplate.has(id)) byTemplate.set(id, []);
+      byTemplate.get(id).push(item);
+    }
+
+    const queues = [...byTemplate.values()];
+    let exhausted = false;
+    while (!exhausted) {
+      exhausted = true;
+      for (const q of queues) {
+        if (!q.length) continue;
+        const { row, i } = q[0];
+        if (used + row.length + 1 > available) { q.length = 0; continue; }
+        q.shift();
+        chosen.set(i, row);
+        used += row.length + 1;
+        exhausted = false;
+      }
     }
 
     const dropped = rows.length - chosen.size;

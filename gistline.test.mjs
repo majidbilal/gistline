@@ -131,7 +131,8 @@ test("log compression prioritises salient lines over position", () => {
 test("the compression note tells the agent retrieval is possible", () => {
   const res = compressOutput("x".repeat(9000), { budget: 500, label: "build" });
   assert.match(res.note, /build output compressed/);
-  assert.match(res.note, /verbatim/i, "an agent must know it can ask for the original");
+  assert.match(res.note, /Nothing was removed|cannot be recovered|retained as id/,
+    "an agent must be told whether anything was removed and whether it can ask for the original");
 });
 
 test("headTail keeps both ends and reports the gap", () => {

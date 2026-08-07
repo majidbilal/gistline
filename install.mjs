@@ -43,7 +43,7 @@ export const PLATFORMS = [
   { id: "pi", label: "Pi coding agent", kind: "skill", user: ".config/pi/skills/gistline/SKILL.md", project: ".pi/skills/gistline/SKILL.md" },
   { id: "kiro", label: "Kiro IDE/CLI", kind: "skill", user: ".kiro/skills/gistline/SKILL.md", project: ".kiro/skills/gistline/SKILL.md" },
   { id: "devin", label: "Devin CLI", kind: "skill", user: ".config/devin/skills/gistline/SKILL.md", project: ".devin/skills/gistline/SKILL.md" },
-  { id: "kilo", label: "Kilo Code", kind: "skill", user: ".config/kilo/skills/gistline/SKILL.md", project: ".kilo/skills/gistline/SKILL.md" },
+  { id: "kilo", label: "Kilo Code", kind: "skill", user: ".config/kilo/skills/gistline/SKILL.md", project: ".kilo/skills/gistline/SKILL.md", hooks: true },
 
   // --- rule files: always included in the conversation -----------------------------------------------------
   { id: "cursor", label: "Cursor", kind: "rule", user: null, project: ".cursor/rules/gistline.mdc" },
@@ -52,7 +52,7 @@ export const PLATFORMS = [
 
   // --- instruction files: a delimited block in a shared file -----------------------------------------------
   { id: "codex", label: "Codex", kind: "instruction", user: ".codex/AGENTS.md", project: "AGENTS.md" },
-  { id: "opencode", label: "OpenCode", kind: "instruction", user: ".config/opencode/AGENTS.md", project: "AGENTS.md" },
+  { id: "opencode", label: "OpenCode", kind: "instruction", user: ".config/opencode/AGENTS.md", project: "AGENTS.md", hooks: true },
   { id: "aider", label: "Aider", kind: "instruction", user: null, project: "AGENTS.md" },
   { id: "claw", label: "OpenClaw", kind: "instruction", user: null, project: "AGENTS.md" },
   { id: "droid", label: "Factory Droid", kind: "instruction", user: null, project: "AGENTS.md" },
@@ -400,6 +400,36 @@ export const HOOK_TARGETS = {
     build: (cmd) => ({ hooks: { BeforeTool: [{ matcher: "run_shell_command", commands: [cmd] }] } }),
     event: "BeforeTool",
   },
+
+  /**
+   * OpenCode and Kilo Code load a PLUGIN MODULE rather than running a command.
+   *
+   * A genuinely different integration shape, not a different protocol on the same one — there is no process to spawn. So the
+   * installed artefact is a small file that re-exports gistline's plugin, and the settings entry names it.
+   *
+   * These two were recorded in ISSUES.md as "not built" while the other three worked, because claiming support that does not
+   * exist is worse than naming the gap.
+   */
+  opencode: {
+    label: "OpenCode",
+    file: ".config/opencode/opencode.json",
+    project: "opencode.json",
+    kind: "plugin",
+    pluginFile: ".opencode/plugin/gistline.mjs",
+    pluginProject: ".opencode/plugin/gistline.mjs",
+    build: () => ({ plugin: ["./.opencode/plugin/gistline.mjs"] }),
+    event: "plugin",
+  },
+  kilo: {
+    label: "Kilo Code",
+    file: ".config/kilo/config.json",
+    project: ".kilo/config.json",
+    kind: "plugin",
+    pluginFile: ".kilo/plugins/gistline.mjs",
+    pluginProject: ".kilo/plugins/gistline.mjs",
+    build: () => ({ plugin: ["./.kilo/plugins/gistline.mjs"] }),
+    event: "plugin",
+  },
 };
 
 /** The command a hook entry runs. `npx --no-install` so it fails visibly rather than silently downloading mid-command. */
@@ -451,6 +481,84 @@ export function unmergeHook(existing, addition, event) {
 }
 
 /**
+ * The plugin module gistline writes for a plugin-based platform.
+ *
+ * A re-export rather than a copy. Copying the logic would mean two versions of the advice — one in the package and a stale
+ * one in the user's project — and the stale one would keep firing after an upgrade fixed something.
+ */
+const pluginShim = () =>
+  `// Written by \`gistline install\`. Re-exports gistline's plugin so an upgrade takes effect without reinstalling.\n`
+  + `export { default } from "gistline/hooks/plugin.mjs";\n`
+  + `export { plugin } from "gistline/hooks/plugin.mjs";\n`;
+
+/**
+ * Install for a plugin-based platform: a module, plus a config entry naming it.
+ *
+ * Two artefacts rather than one, which is why it cannot share the settings-merge path directly. The config is still MERGED —
+ * `opencode.json` holds the user's own configuration and replacing it would be as bad here as anywhere else.
+ */
+function installPluginHook(target, { project, cwd, home, dryRun }) {
+  const modulePath = resolve(project ? cwd : home, project ? target.pluginProject : target.pluginFile);
+  const configPath = resolve(project ? cwd : home, project ? target.project : target.file);
+
+  let existing = {};
+  if (existsSync(configPath)) {
+    try { existing = JSON.parse(readFileSync(configPath, "utf8")); }
+    catch { return { ok: false, reason: `${configPath} is not valid JSON — left untouched` }; }
+  }
+
+  const entry = target.build().plugin[0];
+  const current = Array.isArray(existing.plugin) ? existing.plugin : [];
+  // Idempotent: installing twice must not list the plugin twice, which would run the advice twice.
+  const merged = { ...existing, plugin: current.includes(entry) ? current : [...current, entry] };
+
+  if (!dryRun) {
+    mkdirSync(dirname(modulePath), { recursive: true });
+    writeFileSync(modulePath, pluginShim(), "utf8");
+    mkdirSync(dirname(configPath), { recursive: true });
+    writeFileSync(configPath, `${JSON.stringify(merged, null, 2)}\n`, "utf8");
+  }
+
+  return { ok: true, path: modulePath, configPath, event: "plugin", label: target.label };
+}
+
+/** Uninstall for a plugin-based platform: remove the module and its config entry, leaving the rest alone. */
+function uninstallPluginHook(target, { project, cwd, home, dryRun }) {
+  const modulePath = resolve(project ? cwd : home, project ? target.pluginProject : target.pluginFile);
+  const configPath = resolve(project ? cwd : home, project ? target.project : target.file);
+
+  let removed = false;
+
+  if (existsSync(modulePath)) {
+    if (!dryRun) rmSync(modulePath, { force: true });
+    removed = true;
+  }
+
+  if (existsSync(configPath)) {
+    let existing;
+    try { existing = JSON.parse(readFileSync(configPath, "utf8")); }
+    catch { return { ok: removed, path: modulePath, reason: `${configPath} is not valid JSON — left untouched` }; }
+
+    const entry = target.build().plugin[0];
+    if (Array.isArray(existing.plugin) && existing.plugin.includes(entry)) {
+      const rest = existing.plugin.filter((p) => p !== entry);
+      const next = { ...existing };
+      // An emptied `plugin` key is deleted, so the file returns to its prior shape rather than gaining an empty array.
+      if (rest.length) next.plugin = rest;
+      else delete next.plugin;
+
+      if (!dryRun) {
+        if (Object.keys(next).length) writeFileSync(configPath, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+        else rmSync(configPath, { force: true });
+      }
+      removed = true;
+    }
+  }
+
+  return removed ? { ok: true, path: modulePath, event: "plugin" } : { ok: false, reason: "no gistline plugin found" };
+}
+
+/**
  * Install the hook for one platform.
  *
  * Returns a result rather than throwing, because a hook is an enhancement: a platform whose settings file cannot be parsed
@@ -459,6 +567,9 @@ export function unmergeHook(existing, addition, event) {
 export function installHook(platformId, { project = false, cwd = process.cwd(), home = homedir(), dryRun = false } = {}) {
   const target = HOOK_TARGETS[platformId];
   if (!target) return { ok: false, reason: `${platformId} does not support hooks` };
+
+  // A plugin platform writes a module and a config entry rather than a command entry.
+  if (target.kind === "plugin") return installPluginHook(target, { project, cwd, home, dryRun });
 
   const path = resolve(project ? cwd : home, project ? target.project : target.file);
   const cmd = hookCommand();
@@ -484,6 +595,8 @@ export function installHook(platformId, { project = false, cwd = process.cwd(), 
 export function uninstallHook(platformId, { project = false, cwd = process.cwd(), home = homedir(), dryRun = false } = {}) {
   const target = HOOK_TARGETS[platformId];
   if (!target) return { ok: false, reason: `${platformId} does not support hooks` };
+
+  if (target.kind === "plugin") return uninstallPluginHook(target, { project, cwd, home, dryRun });
 
   const path = resolve(project ? cwd : home, project ? target.project : target.file);
   if (!existsSync(path)) return { ok: false, reason: "no settings file" };

@@ -51,6 +51,12 @@ jobs:
       - name: Verify the README's claims against the code
         run: npm run check-claims
 
+      # The benchmark measures FIDELITY, not just ratio: every corpus declares needles that must survive, and a lost needle
+      # fails the build. A 100% saving that drops the one failing test is a bug, not a win — and this check has already found
+      # three real bugs, including a note that claimed nothing was removed while a third of the rows had been dropped.
+      - name: Benchmark, including the fidelity check
+        run: npm run benchmark
+
       # The check that caught a real packaging bug: `exports` exposed only the entry point, so every other module was
       # unreachable from an installed package while all 379 tests passed in the repository.
       - name: Verify the published package works when installed

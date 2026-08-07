@@ -17,8 +17,24 @@ function bigLog(lines = 3000) {
 test("without a store, the note promises only what it can deliver", () => {
   const res = gist(bigLog(), { budget: 800 });
   assert.equal(res.retrievalId, null);
-  assert.match(res.note, /request the verbatim output/);
-  assert.ok(!/retained as id/.test(res.note));
+  assert.ok(!/retained as id/.test(res.note), "it must not promise retrieval it cannot deliver");
+
+  /**
+   * And it must not claim nothing was removed when something was.
+   *
+   * The note used to say "Nothing was deleted" whenever no store was configured, REGARDLESS of whether a lossy transform had
+   * run — so a log with most of its lines dropped was reported as having lost nothing. The benchmark's fidelity check found
+   * it by noticing values missing from output that claimed to be complete.
+   *
+   * Two independent facts: was anything removed, and can the original be recovered. Conflating them is the exact dishonesty
+   * this tool exists to avoid, and it was doing it in the one line a reader always sees.
+   */
+  if (res.lossy) {
+    assert.match(res.note, /removed and no store was configured/, "a lossy result without a store must say so");
+    assert.match(res.note, /--store/, "and say what would fix it");
+  } else {
+    assert.match(res.note, /Nothing was removed/);
+  }
 });
 
 test("with a store, the original is actually retrievable", () => {
@@ -88,7 +104,9 @@ test("a store failure degrades compression instead of breaking it", () => {
   const res = gist(bigLog(), { budget: 600, store: broken });
   assert.equal(res.compressed, true);
   assert.equal(res.retrievalId, null);
-  assert.match(res.note, /request the verbatim output/, "it must not claim a retrieval it cannot honour");
+  assert.ok(!/retained as id/.test(res.note), "it must not claim a retrieval it cannot honour");
+  // A failed store is indistinguishable from no store, so the note must be as honest about loss either way.
+  if (res.lossy) assert.match(res.note, /cannot be recovered/);
 });
 
 test("prune keeps the store bounded", () => {

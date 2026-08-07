@@ -316,9 +316,25 @@ export function gist(text, { budget = DEFAULT_BUDGET, maxTokens = null, kind = n
     retrievalId = put?.id ?? null;
   }
 
+  /**
+   * The note must reflect BOTH facts, because they are independent.
+   *
+   * This said "Nothing was deleted" whenever no store was configured — regardless of whether a lossy transform had run. So a
+   * CSV that had 233 of its 400 rows dropped was reported as having lost nothing. Found by the benchmark's fidelity check,
+   * which noticed values missing from output that claimed to be complete.
+   *
+   * The two questions are separate:
+   *   was anything removed?      `lossy`
+   *   can the original be got back?  `retrievalId`
+   *
+   * Conflating them is the exact dishonesty this tool exists to avoid, and it was doing it in the one line a reader always
+   * sees.
+   */
   const retrieval = retrievalId
     ? `Full output retained as id ${retrievalId} — retrieve, slice, or grep it for any dropped detail.`
-    : `Nothing was deleted — request the verbatim output if you need a dropped detail.`;
+    : lossy
+      ? "Some content was removed and no store was configured, so it cannot be recovered — pass --store to retain the original."
+      : "Nothing was removed; the content is only stated more compactly.";
   const note = `[${label || detected} output compressed: ${raw.length} → ${body.length} chars. ${retrieval}]`;
 
   return {

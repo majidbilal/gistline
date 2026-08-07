@@ -51,7 +51,8 @@
     "CHANGELOG.md",
     "ISSUES.md",
     "SECURITY.md",
-    "CONTRIBUTING.md"
+    "CONTRIBUTING.md",
+    "BENCHMARKS.md"
   ],
   "engines": {
     "node": ">=20.15.0"
@@ -90,7 +91,8 @@
     "demo-pdf": "node scripts/demo-pdf.mjs",
     "demo-xlsx": "node scripts/demo-xlsx.mjs",
     "verify-package": "npm pack && node scripts/smoke.mjs",
-    "prepublishOnly": "npm test && npm run check-claims && npm run smoke",
-    "architecture": "node scripts/make-architecture.mjs"
+    "prepublishOnly": "npm test && npm run check-claims && npm run benchmark && npm run smoke",
+    "architecture": "node scripts/make-architecture.mjs",
+    "benchmark": "node scripts/benchmark.mjs"
   }
 }
