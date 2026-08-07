@@ -27,6 +27,113 @@ const has = (name) => argv.includes(`--${name}`);
 const sub = argv[0];
 
 /**
+ * `gistline run <command>` — execute and compress in ONE action.
+ *
+ * WHY THIS MATTERS MORE THAN IT LOOKS. The alternative is two steps: redirect output to a file, then compress the file. That
+ * is why the tool gets skipped. One command is a habit; two is a decision made every single time, and across this project's
+ * own construction the tool sat unused for exactly that reason.
+ *
+ * The command runs through the user's own shell so that pipes, redirections and `&&` behave as typed. It is NOT parsed or
+ * rewritten — the thing that runs is the thing that was asked for, which is the same reasoning as the pre-tool hook
+ * advising rather than rewriting.
+ *
+ * THE EXIT CODE IS THE COMMAND'S OWN. A compressor that swallowed a build failure would be worse than useless in CI, so
+ * `gistline run npm test` fails exactly when `npm test` fails.
+ */
+if (sub === "run") {
+  const { spawnSync } = await import("node:child_process");
+
+  // Everything after `run`, minus gistline's own flags, is the command.
+  const OWN_FLAGS = new Set(["--budget", "--kind", "--label", "--store", "--max-tokens"]);
+  const OWN_BOOLS = new Set(["--json", "--stats", "--quiet", "--preserve", "--no-store"]);
+
+  const command = [];
+  for (let i = 1; i < argv.length; i++) {
+    const a = argv[i];
+    if (OWN_FLAGS.has(a)) { i += 1; continue; }
+    if (OWN_BOOLS.has(a)) continue;
+    command.push(a);
+  }
+
+  if (!command.length) {
+    console.error("gistline: run needs a command.\n  gistline run npm test\n  gistline run --kind log -- make build");
+    process.exit(2);
+  }
+
+  // A leading `--` separates gistline's flags from a command that has its own. Dropped once found.
+  if (command[0] === "--") command.shift();
+
+  const budget = Number(flag("budget", DEFAULT_BUDGET));
+
+  /**
+   * ONE ARGUMENT USES THE SHELL; SEVERAL ARE SPAWNED DIRECTLY.
+   *
+   * My first version joined the arguments with spaces and handed the string to a shell. That cannot work: the shell has
+   * already stripped the user's quoting by the time these arrive as argv, so `node -e "write('hi there')"` was rebuilt as
+   * `node -e write('hi there')` and failed to parse. Re-quoting per platform would be guesswork.
+   *
+   * So the shape of the invocation decides:
+   *
+   *   gistline run "npm test | grep fail"   one argument  -> the shell, so pipes and redirections work as typed
+   *   gistline run npm test                 several       -> spawned directly, so quoting is preserved exactly
+   *
+   * Both are useful and neither can serve the other's case. Which one is in play is not guessed at — it is visible in how
+   * the command was written.
+   */
+  const useShell = command.length === 1;
+  const label = flag("label") ?? (useShell ? command[0] : command.join(" ")).slice(0, 60);
+
+  const opts = { encoding: "utf8", maxBuffer: 512 * 1024 * 1024, windowsHide: true };
+
+  // stderr is merged into stdout, because a build's errors are the part most worth keeping and they are usually on stderr.
+  let r = useShell
+    ? spawnSync(command[0], { ...opts, shell: true })
+    : spawnSync(command[0], command.slice(1), opts);
+
+  /**
+   * FALL BACK TO THE SHELL ON ENOENT, which is what makes `gistline run npm test` work at all.
+   *
+   * A direct spawn cannot find `npm` on Windows, because the executable is `npm.cmd` and only a shell resolves that. The
+   * headline use case failed with `spawnSync npm ENOENT` until this existed — found by running the command by hand rather
+   * than by any test, since the tests all invoke `node` directly, which needs no resolution.
+   *
+   * The order matters: direct FIRST, so quoting is preserved for everything that works that way, and the shell only as a
+   * fallback where the alternative is not working at all.
+   */
+  if (!useShell && r.error?.code === "ENOENT") {
+    r = spawnSync(command.join(" "), { ...opts, shell: true });
+  }
+
+  if (r.error) {
+    console.error(`gistline: could not run "${label}": ${r.error.message}`);
+    process.exit(127);
+  }
+
+  const output = `${r.stdout ?? ""}${r.stderr ?? ""}`;
+
+  const compressed = gist(output, {
+    budget,
+    maxTokens: flag("max-tokens") ? Number(flag("max-tokens")) : null,
+    kind: flag("kind"),
+    // The command itself is the natural label, so nobody has to invent one.
+    label,
+    store: has("no-store") ? null : openStore({ dir: flag("store") ?? DEFAULT_STORE_DIR }),
+    transforms: TRANSFORMS,
+  });
+
+  process.stdout.write(`${has("json") ? JSON.stringify(compressed, null, 2) : compressed.text}\n`);
+
+  if (has("stats")) {
+    const stats = makeGistStats();
+    stats.record(compressed);
+    process.stderr.write(`${formatGistStats(stats.snapshot())}\n`);
+  }
+
+  // The command's own exit code, so this is safe to use in CI and in a pre-commit hook.
+  process.exit(r.status ?? 0);
+}
+
+/**
  * Registration subcommands.
  *
  * Placed before the retrieval block because `install` is the first command most people run, and because a subcommand that

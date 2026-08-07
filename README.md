@@ -44,11 +44,28 @@ Verify with: gistline status
 Then use it anywhere output is large:
 
 ```
-npm test 2>&1 | gistline --kind test --label suite     # a command's output
+gistline run npm test                                  # run a command and compress its output, in one step
 gistline --file build.log                              # a file
 gistline --file report.pdf                             # a document, converted then compressed
 gistline retrieve <id>                                 # the original, byte for byte
 ```
+
+`gistline run` is the one to reach for. The alternative is two steps — redirect to a file, then compress the file — and
+**that is why compression tools get skipped.** One command is a habit; two is a decision made every time.
+
+```
+$ gistline run npm test
+[npm test output compressed: 90,125 → 131 chars. Full output retained as id 3daa3cf5dc1f28de
+ — retrieve, slice, or grep it for any dropped detail.]
+[compressed: 986 passing lines omitted]
+
+# tests 493
+# pass 493
+# fail 0
+```
+
+**It passes through the command's own exit code**, so it is safe in CI and in a pre-commit hook: `gistline run npm test`
+fails exactly when `npm test` fails.
 
 ---
 
@@ -275,8 +292,9 @@ gistline uninstall    # remove from everything detected
 ## Commands
 
 ```
+gistline run <command>                              run a command and compress its output
 gistline [--kind K] [--budget N] [--label L]        compress stdin
-gistline --file <path>                              compress a file, converting a document if needed
+gistline --file <path> [--preserve]                 compress a file, converting a document if needed
 
 gistline retrieve <id>                              the original, byte for byte
 gistline slice <id> --from-line N --lines M         part of the original

@@ -91,7 +91,14 @@ export function instructionText({ scope = "project" } = {}) {
 Large command output and large files should be compressed before being read.
 
 **Before reading the output of any command likely to exceed ~500 characters** — a test run, a build log, an install log,
-a large \`git diff\`, a directory listing — pipe it through gistline instead of reading it directly:
+a large \`git diff\`, a directory listing — run it through gistline instead of reading it directly:
+
+\`\`\`
+npx gistline run <command>
+\`\`\`
+
+That is one step, not two. It executes the command, compresses the output, and **passes through the command's own exit
+code**, so it is safe in CI. Piping also works if the command is already written that way:
 
 \`\`\`
 <command> 2>&1 | npx gistline --kind test --label <what-ran>

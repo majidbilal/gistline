@@ -228,3 +228,99 @@ test("conversion notes go to stderr, never into the compressed output", () => {
 test("--budget is validated rather than silently producing nothing", () => {
   assert.match(run(["--file", DOCX, "--budget", "5"]), /EXIT2:.*budget/s);
 });
+
+// --- gistline run: execute and compress in one action ------------------------------------------------------
+//
+// The highest-value missing piece, per the project's own issue log: the two-step flow — redirect to a file, then compress the
+// file — is WHY the tool gets skipped. One command is a habit; two is a decision made every time.
+
+test("run executes a command and compresses its output", () => {
+  const script = "let s='';for(let i=0;i<600;i++)s+='ok '+i+' - passing test\\n';s+='not ok 601 - AssertionError: expected 200\\n# fail 1\\n';process.stdout.write(s)";
+  const out = run(["run", "--kind", "test", "--budget", "400", process.execPath, "-e", script]);
+
+  assert.match(out, /not ok 601 - AssertionError/, "the failure must survive");
+  assert.ok(!out.includes("ok 300 - passing"), "the ordinary lines should be gone");
+  assert.ok(out.length < 4000, "and it must actually have compressed");
+});
+
+test("run passes through the COMMAND'S exit code", () => {
+  // A compressor that swallowed a build failure would be worse than useless in CI. `gistline run npm test` must fail exactly
+  // when `npm test` fails.
+  //
+  // Scripts here use SINGLE quotes throughout. A multi-argument command is spawned directly, so each argument arrives
+  // verbatim — an escaped double quote would arrive as a literal quote character and fail to parse.
+  const ok = run(["run", process.execPath, "-e", "process.exit(0)"]);
+  assert.ok(!ok.startsWith("EXIT"), `a passing command should exit 0, got: ${ok.slice(0, 120)}`);
+
+  const bad = run(["run", process.execPath, "-e", "console.log('boom');process.exit(3)"]);
+  assert.match(bad, /^EXIT3:/, "a failing command's code must reach the caller");
+});
+
+test("run captures stderr as well as stdout", () => {
+  // A build's errors are the part most worth keeping, and they are usually on stderr.
+  const out = run(["run", "--budget", "2000", process.execPath, "-e", "console.error('ERROR: disk full')"]);
+  assert.match(out, /ERROR: disk full/);
+});
+
+test("run labels the output with the command, so nobody has to invent one", () => {
+  const out = run(["run", "--budget", "400", process.execPath, "-e", "process.stdout.write('x'.repeat(5000))"]);
+  assert.match(out, /compressed/, "the note should be present");
+  assert.match(out, /node/, "and should name what ran");
+});
+
+test("run needs a command, and says so", () => {
+  const out = run(["run"]);
+  assert.match(out, /^EXIT2:/);
+  assert.match(out, /run needs a command/);
+});
+
+test("run does not mistake gistline's own flags for the command", () => {
+  // `--budget 400` belongs to gistline; everything else is the command. Getting this wrong would try to execute "--budget".
+  const out = run(["run", "--budget", "2000", "--kind", "test", process.execPath, "-e", "process.stdout.write('hello')"]);
+  assert.ok(!out.startsWith("EXIT"), `should have run cleanly, got: ${out.slice(0, 120)}`);
+  assert.match(out, /hello/);
+});
+
+test("run accepts -- to separate its flags from a command with its own", () => {
+  const out = run(["run", "--budget", "2000", "--", process.execPath, "-e", "process.stdout.write('after-dashdash')"]);
+  assert.match(out, /after-dashdash/);
+});
+
+test("run uses the SHELL when given a single argument, so pipes work", () => {
+  // The two forms serve different needs and neither can serve the other's. One argument means the shell, because the user
+  // wrote it as a shell line; several mean a direct spawn, because quoting must survive.
+  //
+  // Tested with a PIPE, which is the thing the shell form exists for and the thing a direct spawn cannot do. Deliberately
+  // not using `process.execPath` here: on Windows it is `C:\Program Files\nodejs\node.exe`, and an unquoted path containing
+  // a space is split by the shell — a property of the test's own fixture, not of `run`.
+  const out = run(["run", "--budget", "2000", "echo one two three | sort"]);
+  assert.ok(!out.startsWith("EXIT"), `the shell form should work, got: ${out.slice(0, 160)}`);
+  assert.match(out, /one two three/, "the piped output must come through");
+});
+
+test("run reports a command that cannot be executed", () => {
+  const out = run(["run", "definitely-not-a-real-command-xyz"]);
+  // A shell reports an unknown command with its own non-zero code rather than failing to spawn, so either path is correct —
+  // what matters is that it does not look like success.
+  assert.match(out, /^EXIT[1-9]/);
+});
+
+test("run resolves a command that needs a shell to be found", () => {
+  // `gistline run npm test` — the headline use case — failed with `spawnSync npm ENOENT` until a shell fallback existed,
+  // because on Windows the executable is `npm.cmd` and only a shell resolves that.
+  //
+  // Found by running the command BY HAND, not by any test: every other test here invokes `node` by absolute path, which
+  // needs no resolution, so the whole suite passed while the primary use case was broken.
+  //
+  // `npm --version` is used rather than `npm test`, which would run this suite recursively.
+  const out = run(["run", "--budget", "2000", "npm", "--version"]);
+  assert.ok(!out.startsWith("EXIT"), `npm should be resolvable, got: ${out.slice(0, 160)}`);
+  assert.match(out, /\d+\.\d+\.\d+/, "npm's version should come through");
+});
+
+test("run prefers a direct spawn, falling back to the shell only when the command cannot be found", () => {
+  // The order matters: direct first preserves quoting for everything that works that way, and the shell is a fallback where
+  // the alternative is not working at all. A quoted argument must survive.
+  const out = run(["run", "--budget", "2000", process.execPath, "-e", "process.stdout.write('spaces  and  quotes \"kept\"')"]);
+  assert.match(out, /spaces {2}and {2}quotes "kept"/, "exact quoting must survive the direct path");
+});
