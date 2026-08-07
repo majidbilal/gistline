@@ -4,7 +4,7 @@
 import { gist } from "../index.mjs";
 import { TRANSFORMS, LOSSY_TRANSFORMS } from "../transforms/legacy.mjs";
 import { openStore } from "../store.mjs";
-import { expand } from "../transforms/templates.mjs";
+import { expand, expandColumnar } from "../transforms/templates.mjs";
 
 const buildLog = Array.from({ length: 1200 }, (i0, i) => {
   const ts = `2026-08-03T14:${String(Math.floor(i / 60) % 60).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}Z`;
@@ -65,15 +65,24 @@ console.log("  original each one FITS into that budget, not which one used less 
 
 const originals = buildLog.split("\n");
 const covered = (out) => {
-  // How many original lines can still be read out of this output?
-  // For the templated path, expand the row section; for the plain path, count lines present verbatim.
+  /**
+   * How many original lines can still be read out of this output?
+   *
+   * The templated form must be EXPANDED before counting, and with the right expander: columnar output stores values by
+   * column, so a literal search finds nothing even though every line is reconstructible. This harness reported 0%
+   * recoverable when columnar encoding landed — the measurement was stale, not the tool.
+   */
   if (out.includes("\n---\n")) {
     const cut = out.indexOf("\n---\n");
     const header = out.slice(out.indexOf("T1"), cut);
-    const rows = out.slice(cut + 5).split("\n").filter((r) => /^T\d+/.test(r));
+    const rows = out.slice(cut + 5).split("\n").filter((r) => /^[TV]\d+/.test(r));
+    const body = `${header}\n---\n${rows.join("\n")}`;
+
+    // Columnar rows are field-separated by \u0004; the row form is not. That is how the two are told apart.
+    const isColumnar = rows.some((r) => r.includes("\u0004"));
     try {
-      const rebuilt = expand(`${header}\n---\n${rows.join("\n")}`);
-      return rebuilt.split("\n").filter((l) => originals.includes(l)).length;
+      const rebuilt = isColumnar ? expandColumnar(body) : expand(body);
+      return String(rebuilt ?? "").split("\n").filter((l) => originals.includes(l)).length;
     } catch { return 0; }
   }
   return out.split("\n").filter((l) => originals.includes(l)).length;
@@ -93,4 +102,8 @@ const { createContext } = await import("../core/context.mjs");
 const ctx = createContext(buildLog, { kind: "log", budget: 1 });
 const only = T.run({ ...ctx, text: buildLog, truncatable: true });
 console.log(`  ${buildLog.length} -> ${only.text.length} chars  (${(((buildLog.length - only.text.length) / buildLog.length) * 100).toFixed(1)}% smaller, nothing removed)`);
-console.log(`  expand() === input: ${expand(only.text) === buildLog}`);
+// The expander must match the form produced. Templates now emit columnar output when it is smaller, and calling the row
+// expander on it returns null — which printed "false" and looked like a lossless failure rather than a stale check.
+const isColumnar = only.text.includes("\u0004");
+console.log(`  expandable back to the input exactly: ${(isColumnar ? expandColumnar(only.text) : expand(only.text)) === buildLog}`);
+console.log(`  form: ${isColumnar ? "columnar (values encoded by column)" : "row"}`);

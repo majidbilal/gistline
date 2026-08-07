@@ -96,25 +96,30 @@ test("the lossy JSON strategy does not shred a table it does not understand", ()
   assert.ok(table[1].length > 1000, `the table was truncated to ${table[1].length} chars`);
 });
 
-test("head-tail still protects a truncatable output, and matches the legacy path exactly", () => {
-  // The guard must not have disabled the safety net for content that CAN safely be cut.
+test("head-tail still protects a truncatable output", () => {
+  // The safety net must not have been disabled for content that CAN safely be cut.
   //
-  // KNOWN PRE-EXISTING DEFECT, surfaced by this test rather than introduced by it: `headTail` OVERSHOOTS its budget by
-  // roughly 50 characters, because the elision marker it inserts is not counted against the budget. A 400-character
-  // budget yields 452 characters. The parity harness shows the legacy path doing exactly the same, so this is not a
-  // regression — it is a bug that was always there and is now visible.
-  //
-  // Asserted as parity plus a bounded overshoot rather than an absolute limit, because weakening it to `<= 500` would
-  // hide the defect and asserting `<= 400` would fail on behaviour gistline has always had. Logged in ROADMAP.md.
+  // This test used to also assert the pipeline matched the legacy path BYTE FOR BYTE, which was true when both ended at
+  // head-tail. It is no longer: columnar template encoding gets the same log to 93 characters where the legacy path needs
+  // 452. Asserting equality would now be asserting that an improvement had not happened, so the check is what actually
+  // matters — the pipeline is never WORSE, and the net still engages when it is the transform that applies.
   const log = Array.from({ length: 2000 }, (i0, i) => `2026-08-03 INFO line ${i}`).join("\n");
 
   const piped = gist(log, { kind: "log", budget: 400, transforms: TRANSFORMS });
   const legacy = gist(log, { kind: "log", budget: 400 });
 
-  assert.equal(piped.text, legacy.text, "the pipeline must not change legacy behaviour");
-  assert.ok(piped.compressedChars < 2000, "it must still have compressed hard");
-  assert.ok(
-    piped.compressedChars <= 400 + 60,
-    `overshoot grew beyond the known ~52 chars: got ${piped.compressedChars} for a 400 budget`,
-  );
+  assert.ok(piped.compressedChars <= legacy.compressedChars,
+    `the pipeline should be no worse: ${piped.compressedChars} vs ${legacy.compressedChars}`);
+  assert.ok(piped.compressedChars <= 400 + 60, `budget not respected: ${piped.compressedChars}`);
+});
+
+test("head-tail engages when nothing else can reduce the content", () => {
+  // The net exists for content with no structure at all: no repeated format, no table, nothing rankable. Prose that simply
+  // will not fit. Without this the previous test no longer covers head-tail, since templates now handle the log case.
+  const prose = "The quick brown fox jumps over the lazy dog. ".repeat(200);
+  const r = gist(prose, { kind: "log", budget: 400, transforms: TRANSFORMS });
+
+  assert.ok(r.compressedChars <= 400 + 60, `budget not respected: ${r.compressedChars}`);
+  assert.ok(r.compressedChars < prose.length, "it must actually have reduced");
+  assert.ok(r.applied.some((a) => a.applied), "some transform must have run");
 });

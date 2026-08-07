@@ -36,11 +36,11 @@ list, not because any transform checks. No individual transform can get the rule
 
 | | Count |
 |---|---|
-| Source modules | 31 |
-| Source lines | 7,182 |
-| Test files | 26 |
-| Import edges across the repo | 197 |
-| Distinct symbols | 944 |
+| Source modules | 33 |
+| Source lines | 8,206 |
+| Test files | 28 |
+| Import edges across the repo | 209 |
+| Distinct symbols | 1,035 |
 | Runtime dependencies | **0** |
 | Node built-ins used | node:assert/strict, node:child_process, node:crypto, node:fs, node:os, node:path, node:test, node:url, node:zlib |
 
@@ -63,8 +63,8 @@ Orchestration and shared state. Decides what runs and in what order; transforms 
 |---|---|---|---|
 | [`core/context.mjs`](../core/context.mjs) | 92 | 1 | 1 |
 | [`core/doc.mjs`](../core/doc.mjs) | 85 | — | 6 |
-| [`core/ingest.mjs`](../core/ingest.mjs) | 243 | 8 | 1 |
-| [`core/markdown.mjs`](../core/markdown.mjs) | 148 | 1 | 2 |
+| [`core/ingest.mjs`](../core/ingest.mjs) | 281 | 9 | 1 |
+| [`core/markdown.mjs`](../core/markdown.mjs) | 157 | 1 | 2 |
 | [`core/pipeline.mjs`](../core/pipeline.mjs) | 111 | — | 1 |
 
 ## transforms/
@@ -73,19 +73,20 @@ One transformation each. A transform never decides whether it should run — the
 
 | Module | Lines | Imports | Imported by |
 |---|---|---|---|
-| [`transforms/docx.mjs`](../transforms/docx.mjs) | 288 | 2 | 1 |
+| [`transforms/columnar.mjs`](../transforms/columnar.mjs) | 277 | — | 1 |
+| [`transforms/docx.mjs`](../transforms/docx.mjs) | 405 | 2 | 1 |
 | [`transforms/html.mjs`](../transforms/html.mjs) | 337 | 3 | 2 |
 | [`transforms/legacy.mjs`](../transforms/legacy.mjs) | 120 | 4 | 1 |
-| [`transforms/pdf-classify.mjs`](../transforms/pdf-classify.mjs) | 208 | — | 2 |
+| [`transforms/pdf-classify.mjs`](../transforms/pdf-classify.mjs) | 210 | — | 2 |
 | [`transforms/pdf-columns.mjs`](../transforms/pdf-columns.mjs) | 182 | — | 1 |
 | [`transforms/pdf-running.mjs`](../transforms/pdf-running.mjs) | 204 | — | 1 |
 | [`transforms/pdf-tables.mjs`](../transforms/pdf-tables.mjs) | 299 | — | 1 |
 | [`transforms/pdf-text.mjs`](../transforms/pdf-text.mjs) | 504 | 3 | 1 |
 | [`transforms/pdf.mjs`](../transforms/pdf.mjs) | 240 | 6 | 1 |
-| [`transforms/pptx.mjs`](../transforms/pptx.mjs) | 227 | 2 | 1 |
+| [`transforms/pptx.mjs`](../transforms/pptx.mjs) | 335 | 2 | 1 |
 | [`transforms/tables.mjs`](../transforms/tables.mjs) | 47 | 1 | 1 |
-| [`transforms/templates.mjs`](../transforms/templates.mjs) | 275 | 3 | 1 |
-| [`transforms/xlsx.mjs`](../transforms/xlsx.mjs) | 256 | 2 | 1 |
+| [`transforms/templates.mjs`](../transforms/templates.mjs) | 418 | 4 | 1 |
+| [`transforms/xlsx.mjs`](../transforms/xlsx.mjs) | 396 | 2 | 1 |
 
 ## util/
 
@@ -94,8 +95,9 @@ Shared primitives with exactly one implementation. Each exists because two consu
 | Module | Lines | Imports | Imported by |
 |---|---|---|---|
 | [`util/escape.mjs`](../util/escape.mjs) | 143 | — | 3 |
-| [`util/lines.mjs`](../util/lines.mjs) | 105 | — | 2 |
+| [`util/lines.mjs`](../util/lines.mjs) | 115 | — | 2 |
 | [`util/mask.mjs`](../util/mask.mjs) | 114 | — | 1 |
+| [`util/ocr.mjs`](../util/ocr.mjs) | 180 | — | 1 |
 | [`util/pdffont.mjs`](../util/pdffont.mjs) | 364 | 1 | 1 |
 | [`util/pdfobj.mjs`](../util/pdfobj.mjs) | 411 | — | 3 |
 | [`util/unzip.mjs`](../util/unzip.mjs) | 264 | — | 4 |
@@ -174,4 +176,4 @@ Tests sit beside the module they test: `core/pipeline.mjs` has `core/pipeline.te
 
 ---
 
-*31 source modules · regenerate with `npm run architecture`*
+*33 source modules · regenerate with `npm run architecture`*

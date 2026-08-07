@@ -53,6 +53,16 @@ export const toLines = (text) => split(text).lines;
  */
 const RANKS = [
   // rank 3 — a failure. Never dropped while anything else could be.
+  //
+  // `not ok` is listed FIRST and explicitly, because it is TAP's failure marker and none of the words below match it. A test
+  // caught this: `rank("not ok 2 - b")` returned 0, so the single most important line in a test run was treated as ordinary
+  // and dropped. It only surfaced once another transform began winning ahead of the test-specific strategy, which had its
+  // own handling — a gap in shared code, hidden by a special case elsewhere.
+  //
+  // NOT anchored to the line start. The first attempt was `/^\s*not ok\b/`, and a transform that prefixes rows — `V1\u0004`
+  // for a verbatim row in the columnar form — defeated the anchor, so the failure was ranked 0 again and dropped again. The
+  // trailing `\b` is what keeps it precise: "not okay to proceed" has a word character after "ok" and does not match.
+  [3, /\bnot ok\b/i],
   [3, /\b(?:error|fail(?:ed|ure)?|exception|panic|fatal|assert(?:ion)?|refused|denied|timeout|traceback)\b/i],
   // rank 2 — a warning, or a count that tells you the shape of the run.
   [2, /\b(?:warn(?:ing)?|deprecat|skipped|todo|retry|retrying)\b/i],

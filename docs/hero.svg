@@ -24,10 +24,10 @@
 <rect x="24" y="291" width="383" height="7" rx="3" fill="#30363d" opacity="1"/>
 <rect x="24" y="291" width="123" height="7" rx="3" fill="#2ea043" opacity="1"/>
 <text x="24" y="321" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" font-weight="400" fill="#c9d1d9" opacity="1" xml:space="preserve">1,200-line build log</text>
-<text x="424" y="321" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" font-weight="400" fill="#8b949e" opacity="1" xml:space="preserve">68,803 -&gt; 48,651</text>
-<text x="624" y="321" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" font-weight="600" fill="#7ee787" opacity="1" xml:space="preserve">29.3% smaller</text>
+<text x="424" y="321" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" font-weight="400" fill="#8b949e" opacity="1" xml:space="preserve">68,803 -&gt; 20,822</text>
+<text x="624" y="321" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" font-weight="600" fill="#7ee787" opacity="1" xml:space="preserve">69.7% smaller</text>
 <rect x="24" y="331" width="520" height="7" rx="3" fill="#30363d" opacity="1"/>
-<rect x="24" y="331" width="368" height="7" rx="3" fill="#2ea043" opacity="1"/>
+<rect x="24" y="331" width="157" height="7" rx="3" fill="#2ea043" opacity="1"/>
 <text x="24" y="363" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13.5" font-weight="600" fill="#58a6ff" opacity="1" xml:space="preserve">$ </text>
 <text x="44" y="363" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13.5" font-weight="400" fill="#e6edf3" opacity="1" xml:space="preserve">gistline retrieve dd0fd19eb38f9210</text>
 <text x="424" y="363" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" font-weight="400" fill="#8b949e" opacity="1" xml:space="preserve">the original, byte for byte</text>

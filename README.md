@@ -80,15 +80,15 @@ Two stages, and the order is the whole design.
 | Input | What is repeated | Result |
 |---|---|---|
 | 300-record JSON response | the six field names, 300 times | **67.9% smaller**, every record present |
-| Build log, six message formats | the format words, 1,200 times | **29.2% smaller**, every line reconstructible |
+| Build log, six message formats | the format words, and the timestamps | **67.5% smaller**, every line reconstructible |
 | 12-page PDF | the running header, 12 times | stated once, 24 lines of furniture removed |
 | Scraped HTML page | markup, scripts, navigation, styling | **95.8% smaller**, all text kept |
-| Spreadsheet | column headers per row, XML per cell | **94.0% smaller** end to end |
+| Spreadsheet | column headers per row, XML per cell | **94.1% smaller** end to end |
 
 **Stage two removes things — but only from what is left, and only when the budget still is not met.**
 
-A 74,000-character log becomes 52,000 losslessly. If the budget is 4,000, the remainder is then reduced by dropping
-ordinary lines and **keeping every error and warning** — which is why the combined path fits **1.9× more of the log**
+A 74,000-character log becomes 24,000 losslessly. If the budget is 4,000, the remainder is then reduced by dropping
+ordinary lines and **keeping every error and warning** — which is why the combined path fits **4.7× more of the log**
 into the same budget than dropping lines from the start would.
 
 ---
@@ -429,16 +429,20 @@ npm audit signatures
 
 Stated here rather than left to be discovered:
 
-- **Logs compress less than JSON** — 29.2% against 67.9%. A timestamp masked as `<ts>` still has to be emitted, so it
-  moves rather than shrinks. Column-wise and delta encoding of the values would take this considerably further and are
-  not built yet.
+- **Logs now compress as well as JSON** — 67.5% against 67.9%, where they used to sit at 29.2%. The gap was structural:
+  template extraction removed the repeated format words but a timestamp still had to be emitted, so it *moved* rather
+  than shrank. Values are now encoded **column by column** — a column of timestamps becomes deltas, a cycling worker id
+  becomes a dictionary reference, a constant log level becomes a run length — and each column's encoding is chosen by
+  measuring all of them and keeping the smallest that round-trips exactly.
 - **Prose barely compresses at all.** There is no repeated structure to state once. gistline falls back to keeping the
   start and the end, which works and is blunt.
 - **PDF reading order is inferred, not declared.** Single-column pages follow the page. Multi-column order is derived
   from the gutter between columns and is labelled as inferred, because it can be wrong in ways that read perfectly.
 - **PDF tables are inferred from alignment**, since a PDF records no table structure at all. Suspected merged cells are
   reported rather than guessed at.
-- **No OCR.** A scanned document is refused, not attempted.
+- **No OCR bundled.** gistline uses Tesseract if it happens to be installed and refuses cleanly if not — nothing is
+  downloaded and the zero-dependency guarantee holds either way. A scanned PDF also needs rasterising first
+  (`pdftoppm`), which the refusal says.
 - **Extracted text from an untrusted source is untrusted input.** gistline converts and compresses; it does not
   sanitise. A PDF can be built so that extracted text differs from what a human sees on screen, and gistline flags the
   mechanism when it is present but cannot judge intent.
