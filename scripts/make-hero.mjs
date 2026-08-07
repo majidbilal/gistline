@@ -6,8 +6,8 @@
 //
 // The numbers are not decoration. They are read from the demos, so the image cannot drift from what the tool does.
 import { writeFileSync } from "node:fs";
-import { gist } from "./index.mjs";
-import { TRANSFORMS } from "./transforms/legacy.mjs";
+import { gist } from "../index.mjs";
+import { TRANSFORMS } from "../transforms/legacy.mjs";
 
 // Real inputs, the same shapes the demos use.
 const rows = Array.from({ length: 300 }, (i0, i) => ({
@@ -34,9 +34,9 @@ const buildLog = Array.from({ length: 1200 }, (i0, i) => {
  * compression achieves" runs nothing at all and reports 0%. That trap has now caught me three times in this project,
  * which is why the assertion below exists rather than a comment.
  */
-const { compact } = await import("./lossless.mjs");
-const { templates } = await import("./transforms/templates.mjs");
-const { createContext } = await import("./core/context.mjs");
+const { compact } = await import("../lossless.mjs");
+const { templates } = await import("../transforms/templates.mjs");
+const { createContext } = await import("../core/context.mjs");
 
 const jsonCompacted = compact(payload);
 

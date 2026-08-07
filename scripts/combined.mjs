@@ -1,10 +1,10 @@
 // The combined result: lossless first, then structure-aware lossy, with the original recoverable by hash.
 //
 // Run: node combined.mjs
-import { gist } from "./index.mjs";
-import { TRANSFORMS, LOSSY_TRANSFORMS } from "./transforms/legacy.mjs";
-import { openStore } from "./store.mjs";
-import { expand } from "./transforms/templates.mjs";
+import { gist } from "../index.mjs";
+import { TRANSFORMS, LOSSY_TRANSFORMS } from "../transforms/legacy.mjs";
+import { openStore } from "../store.mjs";
+import { expand } from "../transforms/templates.mjs";
 
 const buildLog = Array.from({ length: 1200 }, (i0, i) => {
   const ts = `2026-08-03T14:${String(Math.floor(i / 60) % 60).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}Z`;
@@ -88,8 +88,8 @@ console.log(`  combined keeps ${b > a ? `${(b / Math.max(1, a)).toFixed(1)}x mor
 console.log("\nLOSSLESS STAGE ALONE — forced, without the early return");
 // gist() returns early when the input already fits, so a huge budget skips the pipeline entirely. Call the transform
 // directly to see what the lossless stage achieves on its own.
-const { templates: T } = await import("./transforms/templates.mjs");
-const { createContext } = await import("./core/context.mjs");
+const { templates: T } = await import("../transforms/templates.mjs");
+const { createContext } = await import("../core/context.mjs");
 const ctx = createContext(buildLog, { kind: "log", budget: 1 });
 const only = T.run({ ...ctx, text: buildLog, truncatable: true });
 console.log(`  ${buildLog.length} -> ${only.text.length} chars  (${(((buildLog.length - only.text.length) / buildLog.length) * 100).toFixed(1)}% smaller, nothing removed)`);

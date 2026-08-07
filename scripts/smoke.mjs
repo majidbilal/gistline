@@ -3,7 +3,7 @@
 // A module left out of `files` works locally and throws MODULE_NOT_FOUND for everyone who installs it. This exercises every
 // path a real user reaches, from an installed tarball rather than from source.
 import { deflateSync, deflateRawSync, crc32 } from "node:zlib";
-import { gist, gistFile, ingest, tryIngest } from "./index.mjs";
+import { gist, gistFile, ingest, tryIngest } from "../index.mjs";
 
 const line = (s) => console.log(`  ${s}`);
 let failures = 0;
@@ -27,7 +27,7 @@ check("compress a test log", () => {
 });
 
 check("lossless JSON table compaction", async () => {
-  const { TRANSFORMS } = await import("./transforms/legacy.mjs");
+  const { TRANSFORMS } = await import("../transforms/legacy.mjs");
   const rows = Array.from({ length: 200 }, (i0, i) => ({ id: i, name: `n${i}`, ok: i % 2 === 0, tier: "a" }));
   const r = gist(JSON.stringify({ data: rows }, null, 2), { budget: 99999, transforms: TRANSFORMS });
   return `applied ${r.applied.filter((a) => a.applied).map((a) => a.id).join(",") || "none"}`;
@@ -127,7 +127,7 @@ check("a scanned PDF is refused with a reason", () => {
 });
 
 check("retrieval store round-trip", async () => {
-  const { openStore } = await import("./store.mjs");
+  const { openStore } = await import("../store.mjs");
   const store = openStore({ dir: ".store-smoke" });
   const original = "line\n".repeat(3000);
   const r = gist(original, { kind: "log", budget: 400, store });
@@ -137,7 +137,7 @@ check("retrieval store round-trip", async () => {
 });
 
 check("installer is reachable and lists platforms", async () => {
-  const { PLATFORMS, contentFor, findPlatform } = await import("./install.mjs");
+  const { PLATFORMS, contentFor, findPlatform } = await import("../install.mjs");
   const body = contentFor(findPlatform("cursor"));
   if (!body.includes("alwaysApply")) throw new Error("cursor rule lacks frontmatter");
   return `${PLATFORMS.length} platforms`;

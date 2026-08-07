@@ -2,10 +2,10 @@
 //
 // Run: node demo-pdf.mjs
 import { deflateSync } from "node:zlib";
-import { readPdf } from "./transforms/pdf.mjs";
-import { toMarkdown } from "./core/markdown.mjs";
-import { gist } from "./index.mjs";
-import { TRANSFORMS } from "./transforms/legacy.mjs";
+import { readPdf } from "../transforms/pdf.mjs";
+import { toMarkdown } from "../core/markdown.mjs";
+import { gist } from "../index.mjs";
+import { TRANSFORMS } from "../transforms/legacy.mjs";
 
 const PAGES = 12;
 

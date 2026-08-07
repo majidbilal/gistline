@@ -35,21 +35,23 @@
     "cli.mjs",
     "mcp.mjs",
     "install.mjs",
-    "smoke.mjs",
     "store.mjs",
     "lossless.mjs",
     "core/*.mjs",
     "util/*.mjs",
     "transforms/*.mjs",
+    "hooks/*.mjs",
     "!**/*.test.mjs",
+    "scripts/*.mjs",
+    "docs/hero.svg",
+    "docs/ARCHITECTURE.md",
     "README.md",
     "LICENSE",
     "ROADMAP.md",
     "CHANGELOG.md",
     "ISSUES.md",
     "SECURITY.md",
-    "CONTRIBUTING.md",
-    "docs/"
+    "CONTRIBUTING.md"
   ],
   "engines": {
     "node": ">=20.15.0"
@@ -81,13 +83,14 @@
   ],
   "scripts": {
     "test": "node --test",
-    "smoke": "node smoke.mjs",
-    "verify-package": "npm pack && node smoke.mjs",
-    "demo": "node demo.mjs",
-    "demo-pdf": "node demo-pdf.mjs",
-    "demo-xlsx": "node demo-xlsx.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "check-claims": "node scripts/check-claims.mjs",
+    "hero": "node scripts/make-hero.mjs",
+    "demo": "node scripts/demo.mjs",
+    "demo-pdf": "node scripts/demo-pdf.mjs",
+    "demo-xlsx": "node scripts/demo-xlsx.mjs",
+    "verify-package": "npm pack && node scripts/smoke.mjs",
     "prepublishOnly": "npm test && npm run check-claims && npm run smoke",
-    "check-claims": "node check-claims.mjs",
-    "hero": "node make-hero.mjs"
+    "architecture": "node scripts/make-architecture.mjs"
   }
 }

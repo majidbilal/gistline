@@ -3,10 +3,10 @@
 // The plan asserted that XLSX -> Markdown -> lossless compaction compounds, and recorded it as a HYPOTHESIS inferred
 // from the 67.9% measured on JSON. This measures it.
 import { deflateRawSync, crc32 } from "node:zlib";
-import { readXlsx } from "./transforms/xlsx.mjs";
-import { toMarkdown } from "./core/markdown.mjs";
-import { gist } from "./index.mjs";
-import { TRANSFORMS } from "./transforms/legacy.mjs";
+import { readXlsx } from "../transforms/xlsx.mjs";
+import { toMarkdown } from "../core/markdown.mjs";
+import { gist } from "../index.mjs";
+import { TRANSFORMS } from "../transforms/legacy.mjs";
 
 function makeXlsx(parts) {
   const locals = []; const centrals = []; let offset = 0;

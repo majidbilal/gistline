@@ -1,9 +1,9 @@
 // Manual inspection: show the real before and after, on real shapes, so results can be judged rather than trusted.
 //
 // Run: node demo.mjs
-import { templates } from "./transforms/templates.mjs";
-import { tables } from "./transforms/tables.mjs";
-import { createContext } from "./core/context.mjs";
+import { templates } from "../transforms/templates.mjs";
+import { tables } from "../transforms/tables.mjs";
+import { createContext } from "../core/context.mjs";
 
 const show = (title, raw, transform) => {
   const ctx = createContext(raw, { budget: 1_000_000 });

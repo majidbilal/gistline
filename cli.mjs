@@ -29,9 +29,12 @@ const sub = argv[0];
  * writes files should be impossible to reach by accident from a piping path.
  */
 if (["install", "uninstall", "status", "platforms"].includes(sub)) {
-  const { PLATFORMS, findPlatform, installPlatform, uninstallPlatform, detect, status } = await import("./install.mjs");
+  const { PLATFORMS, findPlatform, installPlatform, uninstallPlatform, detect, status, installHook, uninstallHook } = await import("./install.mjs");
   const project = argv.includes("--project");
   const dryRun = argv.includes("--dry-run");
+  // Hooks write to a settings file, which is a bigger intrusion than a skill file. `--no-hooks` opts out without losing
+  // the instruction, for anyone who would rather keep their own settings untouched.
+  const noHooks = argv.includes("--no-hooks");
   const named = flag("platform", null);
 
   if (sub === "platforms") {
@@ -76,6 +79,7 @@ if (["install", "uninstall", "status", "platforms"].includes(sub)) {
   }
 
   const act = sub === "install" ? installPlatform : uninstallPlatform;
+  const hookAct = sub === "install" ? installHook : uninstallHook;
   let done = 0;
 
   for (const p of targets) {
@@ -89,6 +93,18 @@ if (["install", "uninstall", "status", "platforms"].includes(sub)) {
       console.log(`  ${r.action ?? "wrote"} ${r.path}${r.shared ? "  (shared file — only gistline's block was touched)" : ""}`);
     } else {
       console.log(`  skipped ${p.label}: ${r.reason}`);
+    }
+
+    /**
+     * The hook, where the platform supports one.
+     *
+     * A separate step because it can fail independently: an unparseable `settings.json` must not cost the instruction file
+     * that already installed successfully. So a hook failure is reported and the install still counts as done.
+     */
+    if (p.hooks && !noHooks) {
+      const h = hookAct(p.id, { project, dryRun });
+      if (h.ok) console.log(`  ${sub === "install" ? "hooked" : "unhooked"} ${h.path}  (${h.event})`);
+      else console.log(`  no hook for ${p.label}: ${h.reason}`);
     }
   }
 

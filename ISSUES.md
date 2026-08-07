@@ -120,11 +120,18 @@ failing test is a bug, not a win.
 line) and a check that every needle survives. Including the cases where gistline does badly, because a benchmark showing
 only wins is marketing.
 
-### The installer writes files but installs no hooks
+### The installer writes hooks for three platforms, not all five
 
-Skill, rule and instruction files are written. The **pre-tool hooks** that some assistants support — which would fire
-before a command likely to produce large output — are not yet written, so on those platforms the instruction is
-always-on guidance rather than an automatic prompt.
+`gistline install` writes a **pre-tool hook** for Claude Code, Gemini CLI and CodeBuddy, which advises before a command
+likely to produce large output. It **advises rather than rewrites**: silently altering a command means the thing that runs
+is not the thing that was decided, and it breaks on redirections and multi-command lines.
+
+**OpenCode and Kilo Code** expose their equivalent through a *plugin module* rather than a settings entry, which is a
+different integration shape and is not built. On those two, and on the remaining eighteen platforms, gistline is
+always-on guidance in a skill, rule or instruction file rather than an automatic prompt.
+
+Opt out of hooks entirely with `gistline install --no-hooks`, which keeps the instruction and leaves your settings file
+untouched.
 
 ---
 

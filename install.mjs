@@ -322,3 +322,136 @@ export function status({ cwd = process.cwd(), home = homedir() } = {}) {
 
   return [...byPath.values()];
 }
+
+/**
+ * Where each platform's hook configuration lives, and in what shape.
+ *
+ * Five platforms, three protocols. The shapes are genuinely different — Claude and CodeBuddy use a matcher-plus-command
+ * array under an event name, Gemini uses a flatter form, and OpenCode and Kilo want a plugin module rather than a settings
+ * entry. Pretending they are the same would mean installing something that silently never fires.
+ */
+export const HOOK_TARGETS = {
+  claude: {
+    label: "Claude Code",
+    file: ".claude/settings.json",
+    project: ".claude/settings.json",
+    build: (cmd) => ({ hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: cmd }] }] } }),
+    event: "PreToolUse",
+  },
+  codebuddy: {
+    label: "CodeBuddy",
+    file: ".codebuddy/settings.json",
+    project: ".codebuddy/settings.json",
+    build: (cmd) => ({ hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: cmd }] }] } }),
+    event: "PreToolUse",
+  },
+  gemini: {
+    label: "Gemini CLI",
+    file: ".gemini/settings.json",
+    project: ".gemini/settings.json",
+    build: (cmd) => ({ hooks: { BeforeTool: [{ matcher: "run_shell_command", commands: [cmd] }] } }),
+    event: "BeforeTool",
+  },
+};
+
+/** The command a hook entry runs. `npx --no-install` so it fails visibly rather than silently downloading mid-command. */
+const hookCommand = () => `node "${new URL("hooks/pre-tool.mjs", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")}"`;
+
+/**
+ * Merge a hook into an existing settings file.
+ *
+ * DEEP MERGE, NEVER OVERWRITE. `settings.json` holds a person's own configuration — permissions, model choices, other
+ * tools' hooks — and replacing it would be the worst thing this installer could do. The same principle as splicing
+ * `AGENTS.md`, but JSON needs real merging rather than delimiters.
+ *
+ * Idempotent by command string: installing twice does not produce two identical hooks, which would run the advice twice.
+ */
+export function mergeHook(existing, addition, event) {
+  const base = existing && typeof existing === "object" ? structuredClone(existing) : {};
+  base.hooks ??= {};
+
+  const incoming = addition.hooks[event];
+  const current = Array.isArray(base.hooks[event]) ? base.hooks[event] : [];
+
+  /**
+   * Compared ENTRY BY ENTRY, not entry against the whole array.
+   *
+   * The first version compared each existing entry to `JSON.stringify(incoming)` — an array — so it never matched anything
+   * and installing twice produced two identical hooks, which run the advice twice and read like a bug. A test caught it.
+   */
+  const isOurs = (entry, ours) => JSON.stringify(entry) === JSON.stringify(ours);
+  const toAdd = incoming.filter((entry) => !current.some((existing) => isOurs(existing, entry)));
+
+  base.hooks[event] = [...current, ...toAdd];
+  return base;
+}
+
+/** Remove our hook and nothing else. An emptied `hooks` key is deleted so the file returns to its prior shape. */
+export function unmergeHook(existing, addition, event) {
+  if (!existing?.hooks?.[event]) return { settings: existing, removed: false };
+
+  const base = structuredClone(existing);
+  const ours = JSON.stringify(addition.hooks[event][0]);
+  const before = base.hooks[event].length;
+
+  base.hooks[event] = base.hooks[event].filter((e) => JSON.stringify(e) !== ours);
+
+  if (!base.hooks[event].length) delete base.hooks[event];
+  if (!Object.keys(base.hooks).length) delete base.hooks;
+
+  return { settings: base, removed: base.hooks?.[event]?.length !== before };
+}
+
+/**
+ * Install the hook for one platform.
+ *
+ * Returns a result rather than throwing, because a hook is an enhancement: a platform whose settings file cannot be parsed
+ * should not fail the whole install, and the instruction file it also received still works.
+ */
+export function installHook(platformId, { project = false, cwd = process.cwd(), home = homedir(), dryRun = false } = {}) {
+  const target = HOOK_TARGETS[platformId];
+  if (!target) return { ok: false, reason: `${platformId} does not support hooks` };
+
+  const path = resolve(project ? cwd : home, project ? target.project : target.file);
+  const cmd = hookCommand();
+
+  let existing = {};
+  if (existsSync(path)) {
+    try { existing = JSON.parse(readFileSync(path, "utf8")); }
+    catch { return { ok: false, reason: `${path} is not valid JSON — left untouched` }; }
+  }
+
+  const merged = mergeHook(existing, target.build(cmd), target.event);
+
+  if (!dryRun) {
+    mkdirSync(dirname(path), { recursive: true });
+    // Two-space JSON, matching what these tools write themselves, so a diff shows only the addition.
+    writeFileSync(path, `${JSON.stringify(merged, null, 2)}\n`, "utf8");
+  }
+
+  return { ok: true, path, event: target.event, label: target.label, existed: existsSync(path) };
+}
+
+/** Remove the hook for one platform. */
+export function uninstallHook(platformId, { project = false, cwd = process.cwd(), home = homedir(), dryRun = false } = {}) {
+  const target = HOOK_TARGETS[platformId];
+  if (!target) return { ok: false, reason: `${platformId} does not support hooks` };
+
+  const path = resolve(project ? cwd : home, project ? target.project : target.file);
+  if (!existsSync(path)) return { ok: false, reason: "no settings file" };
+
+  let existing;
+  try { existing = JSON.parse(readFileSync(path, "utf8")); }
+  catch { return { ok: false, reason: `${path} is not valid JSON — left untouched` }; }
+
+  const { settings, removed } = unmergeHook(existing, target.build(hookCommand()), target.event);
+  if (!removed) return { ok: false, reason: "no gistline hook found" };
+
+  if (!dryRun) {
+    // A settings file holding nothing but our hook is deleted; one with other content keeps it.
+    if (Object.keys(settings).length) writeFileSync(path, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+    else rmSync(path, { force: true });
+  }
+
+  return { ok: true, path, event: target.event };
+}

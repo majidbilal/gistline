@@ -207,6 +207,27 @@ repository instead of your user profile.
 block and replaces only that block. `gistline uninstall` removes the block and leaves everything else exactly as it
 was.
 
+### Automatic prompting, on the platforms that support it
+
+Claude Code, Gemini CLI and CodeBuddy support a **pre-tool hook**, so gistline can speak up at the moment it matters:
+
+```
+$ npm test
+  gistline: This will likely produce a test suite. Consider piping it through gistline
+  so the output arrives compressed:
+    npm test 2>&1 | npx gistline --kind test --label <what-ran>
+```
+
+**It advises rather than rewrites.** Silently changing your command would mean the thing that runs is not the thing you
+asked for, and it breaks on redirections and multi-command lines. The assistant decides.
+
+It only fires on commands that really do produce large output — test runs, builds, installs, `git diff`, container logs —
+and stays silent on `ls`, `git status`, and anything already piped through gistline. A hook that fires on everything gets
+ignored, and an ignored hook is worse than none.
+
+The hook merges into your existing `settings.json` and leaves the rest untouched. Skip it with `--no-hooks` if you would
+rather keep that file to yourself.
+
 ```
 gistline status       # which files were written, and which assistants read each one
 gistline uninstall    # remove from everything detected

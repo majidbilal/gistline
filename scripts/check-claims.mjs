@@ -1,5 +1,5 @@
 // Verify every measurable claim the README makes. Kept in the repo because it caught three of my own errors.
-import { PLATFORMS } from "./install.mjs";
+import { PLATFORMS } from "../install.mjs";
 import { readFileSync, existsSync } from "node:fs";
 
 const readme = readFileSync("README.md", "utf8");
