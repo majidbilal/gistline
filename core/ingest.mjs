@@ -89,10 +89,10 @@ export class UnsupportedFormat extends Error {
  * A PARTIALLY readable document is read, not refused. Losing seventy good pages because ten are scanned would be the
  * wrong trade, and the notes name the missing pages by number.
  */
-function convertPdf(buf, name) {
+function convertPdf(buf, name, mode) {
   try {
-    const { document, pages, recovered, skipped } = readPdf(buf);
-    const text = toMarkdown(document, { includeNotes: false });
+    const { document, pages, recovered, skipped } = readPdf(buf, { mode });
+    const text = toMarkdown(document, { includeNotes: false, mode });
 
     const summary = recovered === pages
       ? `Read all ${pages} page(s).`
@@ -136,11 +136,11 @@ export function looksLikeText(buf) {
  * Order matters: binary containers are identified first, because a ZIP or an image can contain byte sequences that would
  * satisfy a text heuristic. Text detection is the fallback, not the first guess.
  */
-export function ingest(input, { name = "" } = {}) {
+export function ingest(input, { name = "", mode = "information" } = {}) {
   // A string is already text. Passed through so a caller can use one entry point for both.
   if (typeof input === "string") {
     return looksLikeHtml(input)
-      ? convertHtml(input)
+      ? convertHtml(input, mode)
       : result(input, "text", { original: input.length });
   }
 
@@ -149,14 +149,14 @@ export function ingest(input, { name = "" } = {}) {
 
   // Formats with a handler run FIRST: they may succeed, where a refusal never can.
   for (const h of HANDLED) {
-    if (h.test(buf)) return h.handler(buf, name);
+    if (h.test(buf)) return h.handler(buf, name, mode);
   }
 
   for (const r of REFUSALS) {
     if (r.test(buf)) throw new UnsupportedFormat(r.id, r.why);
   }
 
-  if (looksLikeZip(buf)) return convertZip(buf, name);
+  if (looksLikeZip(buf)) return convertZip(buf, name, mode);
 
   if (!looksLikeText(buf)) {
     throw new UnsupportedFormat(
@@ -167,13 +167,13 @@ export function ingest(input, { name = "" } = {}) {
   }
 
   const text = buf.toString("utf8");
-  return looksLikeHtml(text) ? convertHtml(text) : result(text, "text", { original: buf.length });
+  return looksLikeHtml(text) ? convertHtml(text, mode) : result(text, "text", { original: buf.length });
 }
 
 /** HTML through the reader and the shared writer. */
-function convertHtml(source) {
+function convertHtml(source, mode) {
   const document = readHtml(source);
-  const text = toMarkdown(document, { includeNotes: false });
+  const text = toMarkdown(document, { includeNotes: false, mode });
   return result(text, "html", { notes: document.notes, converted: true, original: source.length });
 }
 
@@ -184,7 +184,7 @@ function convertHtml(source) {
  * produce something plausible and meaningless, and "here is a wall of text from 40 files" is worse for a reader than
  * being told to extract the one they wanted.
  */
-function convertZip(buf, name) {
+function convertZip(buf, name, mode) {
   let kind;
   try { kind = ooxmlKind(buf); }
   catch (e) {
@@ -193,7 +193,7 @@ function convertZip(buf, name) {
 
   if (kind === "xlsx") {
     const { document, sheets, cells } = readXlsx(buf);
-    const text = toMarkdown(document, { includeNotes: false });
+    const text = toMarkdown(document, { includeNotes: false, mode });
     return result(text, "xlsx", {
       notes: [...document.notes, `Read ${sheets} sheet(s), ${cells} cell(s).`],
       converted: true,
@@ -203,7 +203,7 @@ function convertZip(buf, name) {
 
   if (kind === "docx") {
     const { document, blocks } = readDocx(buf);
-    const text = toMarkdown(document, { includeNotes: false });
+    const text = toMarkdown(document, { includeNotes: false, mode });
     return result(text, "docx", {
       notes: [...document.notes, `Read ${blocks} block(s).`],
       converted: true,
@@ -212,8 +212,8 @@ function convertZip(buf, name) {
   }
 
   if (kind === "pptx") {
-    const { document, slides, withNotes } = readPptx(buf);
-    const text = toMarkdown(document, { includeNotes: false });
+    const { document, slides, withNotes } = readPptx(buf, { mode });
+    const text = toMarkdown(document, { includeNotes: false, mode });
     return result(text, "pptx", {
       notes: [...document.notes, `Read ${slides} slide(s), ${withNotes} with speaker notes.`],
       converted: true,

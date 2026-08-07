@@ -57,8 +57,8 @@ test("a workbook is detected from its BYTES and converted to Markdown", () => {
   assert.equal(r.kind, "xlsx");
   assert.equal(r.converted, true);
   assert.match(r.text, /^## Data/m);
-  assert.match(r.text, /\| Name \| Score \|/);
-  assert.match(r.text, /\| Alice \| 100 \|/);
+  assert.match(r.text, /Name,Score/);
+  assert.match(r.text, /Alice,100/);
 });
 
 test("the reader's limits come back as notes, not as silence", () => {

@@ -46,8 +46,8 @@ test("GATE: a real article converts and every structural element survives", () =
   assert.match(md, /\*starts\*/, "em");
   assert.match(md, /^1\. Open `Settings`/m, "ordered list with inline code");
   assert.match(md, /^3\. Look for "synced"/m, "entity decoded inside a list item");
-  assert.match(md, /\| Account \| Priority \|/, "table header");
-  assert.match(md, /\| Email \| First \|/, "table row");
+  assert.match(md, /Account,Priority/, "table header");
+  assert.match(md, /Email,First/, "table row");
   assert.match(md, /\[the full guide\]\(https:\/\/example\.com\/guide\)/, "link with target");
   assert.match(md, /^> Two ways in beats one perfect way in\./m, "blockquote");
   assert.match(md, /\[image: A numbered list of accounts\]/, "image alt kept");
@@ -123,23 +123,36 @@ test("a table is converted BEFORE tags are stripped, so rows survive", () => {
   const md = htmlToMarkdown(`<html><body><main><table>
     <tr><th>A</th><th>B</th></tr><tr><td>1</td><td>2</td></tr></table>
     <p>${"padding ".repeat(40)}</p></main></body></html>`);
-  assert.match(md, /\| A \| B \|/);
-  assert.match(md, /\| --- \| --- \|/);
-  assert.match(md, /\| 1 \| 2 \|/);
+  assert.match(md, /A,B/);
+  assert.ok(!/---/.test(md.split("\n\n")[0]), "the dense form has no separator row — that is the point of it");
+  assert.match(md, /1,2/);
 });
 
-test("a cell containing a pipe cannot break the table", () => {
+test("delimiter safety, per mode: a COMMA is quoted in the dense form", () => {
+  // The dense form's delimiter is a comma, so that is what must be escaped. A pipe is ordinary text there and is left
+  // exactly as written — this test replaced one asserting pipe escaping, which was testing preserve mode's rule against
+  // the default mode's output.
+  const md = htmlToMarkdown(`<html><body><main><table><tr><th>Cmd</th></tr><tr><td>a, b</td></tr></table>
+    <p>${"padding ".repeat(40)}</p></main></body></html>`);
+  assert.match(md, /"a, b"/, "a cell containing the delimiter must be quoted");
+});
+
+test("delimiter safety, per mode: a PIPE is left alone in the dense form", () => {
+  // The other half. Escaping a pipe where it is not a delimiter would corrupt the value with a stray backslash.
   const md = htmlToMarkdown(`<html><body><main><table><tr><th>Cmd</th></tr><tr><td>a | b</td></tr></table>
     <p>${"padding ".repeat(40)}</p></main></body></html>`);
-  assert.match(md, /a \\\| b/, "the pipe must be escaped");
+  assert.match(md, /^a \| b$/m, "the pipe is content here, not syntax");
+  assert.ok(!md.includes("\\|"), "it must not be escaped");
 });
 
 test("a ragged table is padded rather than misaligned", () => {
+  // Padding matters more in the dense form than in the pipe form: without it, a short row's values shift left and land
+  // under the wrong header, which reads as data rather than as damage.
   const md = htmlToMarkdown(`<html><body><main><table>
     <tr><th>A</th><th>B</th><th>C</th></tr><tr><td>1</td></tr></table>
     <p>${"padding ".repeat(40)}</p></main></body></html>`);
-  const row = md.split("\n").find((l) => l.startsWith("| 1"));
-  assert.equal((row.match(/\|/g) ?? []).length, 4, `expected 3 cells, got: ${row}`);
+  const row = md.split("\n").find((l) => l.startsWith("1"));
+  assert.equal(row, "1,,", `expected three fields with two empty, got: ${row}`);
 });
 
 test("nested noise elements are removed, not just the outermost", () => {

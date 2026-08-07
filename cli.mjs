@@ -8,8 +8,12 @@
 // Exit codes: 0 always on successful processing (this is a filter, not a gate), 2 on bad usage.
 
 import { readFileSync } from "node:fs";
-import { gist, makeGistStats, formatGistStats, estimateTokens, DEFAULT_BUDGET } from "./index.mjs";
+import { basename } from "node:path";
+import { gist, gistFile, makeGistStats, formatGistStats, estimateTokens, DEFAULT_BUDGET } from "./index.mjs";
 import { openStore, DEFAULT_STORE_DIR } from "./store.mjs";
+// The wired transform list, so the CLI gets lossless-first compression and document conversion rather than the bare
+// single-strategy path. Without this the CLI silently used a different pipeline from every other entry point.
+import { TRANSFORMS } from "./transforms/legacy.mjs";
 
 const argv = process.argv.slice(2);
 
@@ -181,18 +185,14 @@ async function readStdin() {
 }
 
 const file = flag("file");
-let input = "";
-try {
-  input = file ? readFileSync(file, "utf8") : await readStdin();
-} catch (e) {
-  console.error(`gistline: cannot read input: ${e.message}`);
-  process.exit(2);
-}
 
-if (!input) {
-  console.error("gistline: no input. Pipe something in, or pass --file <path>. See --help.");
-  process.exit(2);
-}
+/**
+ * `--preserve` keeps the document's presentation.
+ *
+ * The default is information: the caller wanted to know what the document says. Preserve is for when the answer has to go
+ * back into a document, and it must be asked for.
+ */
+const mode = argv.includes("--preserve") ? "preserve" : "information";
 
 const budget = Number(flag("budget", DEFAULT_BUDGET));
 if (!Number.isFinite(budget) || budget < 100) {
@@ -200,19 +200,65 @@ if (!Number.isFinite(budget) || budget < 100) {
   process.exit(2);
 }
 
-const result = gist(input, {
+// `--store` with no value falls back to the default directory.
+const store = has("store")
+  ? openStore({ dir: (flag("store") ?? "").startsWith("--") ? DEFAULT_STORE_DIR : flag("store") ?? DEFAULT_STORE_DIR })
+  : null;
+
+const common = {
   budget,
   maxTokens: flag("max-tokens") ? Number(flag("max-tokens")) : null,
   kind: flag("kind"),
-  label: flag("label", "") ?? "",
-  // `--store` with no value falls back to the default directory.
-  store: has("store") ? openStore({ dir: (flag("store") ?? "").startsWith("--") ? DEFAULT_STORE_DIR : flag("store") ?? DEFAULT_STORE_DIR }) : null,
-});
+  store,
+  transforms: TRANSFORMS,
+};
+
+/**
+ * A FILE IS READ AS BYTES, NOT AS TEXT.
+ *
+ * This was a real bug. The CLI read every file with `readFileSync(file, "utf8")` and passed it to `gist()`, the text path —
+ * so `gistline --file report.docx` printed the raw ZIP archive as mojibake, while `ingest()` had known how to read docx,
+ * xlsx, pptx, pdf and html for days and the README documented exactly that command.
+ *
+ * Nothing caught it because the tests exercised `ingest` directly and the smoke test used the API. The command a person
+ * actually types was the one path with no coverage, which is now closed by a CLI test.
+ */
+let result;
+
+if (file) {
+  try {
+    result = gistFile(readFileSync(file), { ...common, name: basename(file), mode, label: flag("label", basename(file)) });
+  } catch (e) {
+    // A refusal is a normal outcome and its message is the useful part, so no stack trace. Exit 1 for "I understood this
+    // format and declined", 2 for "I could not read it at all" — a caller can tell them apart.
+    console.error(`gistline: ${e.message}`);
+    process.exit(e.format ? 1 : 2);
+  }
+} else {
+  let input = "";
+  try {
+    input = await readStdin();
+  } catch (e) {
+    console.error(`gistline: cannot read input: ${e.message}`);
+    process.exit(2);
+  }
+  if (!input) {
+    console.error("gistline: no input. Pipe something in, or pass --file <path>. See --help.");
+    process.exit(2);
+  }
+  result = gist(input, { ...common, label: flag("label", "") ?? "" });
+}
 
 if (has("json")) {
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 } else {
   process.stdout.write(`${result.text}\n`);
+}
+
+// Conversion notes — what a reader could not represent — go to stderr, so they inform a person without polluting the
+// compressed output a model receives on stdout.
+if (result.ingest?.notes?.length && !has("quiet") && !has("json")) {
+  for (const n of result.ingest.notes) process.stderr.write(`  note: ${n}\n`);
 }
 
 if (has("stats")) {

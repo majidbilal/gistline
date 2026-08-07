@@ -85,8 +85,8 @@ test("GATE: a real document converts with headings, lists, a table and a link", 
   assert.match(md, /^## Scope/m);
   assert.match(md, /^1\. First obligation\n2\. Second obligation/m, "an ordered list, numbered by position");
   assert.match(md, /^- A bulleted note/m, "a bulleted list from a different numbering id");
-  assert.match(md, /\| Item \| Cost \|/);
-  assert.match(md, /\| Setup \| 500 \|/);
+  assert.match(md, /Item,Cost/);
+  assert.match(md, /Setup,500/);
   assert.match(md, /\[the spec\]\(https:\/\/example\.com\/spec\)/);
 });
 
@@ -175,8 +175,8 @@ test("entities decode once, not twice", () => {
 test("a table between two paragraphs STAYS between them", () => {
   // Collecting all paragraphs then all tables would silently reorder the document.
   const md = toMarkdown(readDocx(DOC()).document);
-  assert.ok(md.indexOf("| Item | Cost |") < md.indexOf("See [the spec]"), "the table must precede the following paragraph");
-  assert.ok(md.indexOf("A bulleted note") < md.indexOf("| Item | Cost |"), "the list must precede the table");
+  assert.ok(md.indexOf("Item,Cost") < md.indexOf("See [the spec]"), "the table must precede the following paragraph");
+  assert.ok(md.indexOf("A bulleted note") < md.indexOf("Item,Cost"), "the list must precede the table");
 });
 
 test("footnotes are collected at the end, and the separator entries are not content", () => {

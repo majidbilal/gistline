@@ -185,3 +185,54 @@ test("the hook platforms are exactly those flagged in the platform table", () =>
   const flagged = PLATFORMS.filter((p) => p.hooks).map((p) => p.id).sort();
   assert.deepEqual(flagged, Object.keys(HOOK_TARGETS).sort());
 });
+
+// --- the shell-fetch and mode guidance the installer writes -------------------------------------------------
+
+test("the instruction tells the agent to fetch through the SHELL, not a built-in tool", () => {
+  // The reason this matters: a built-in fetch puts the page straight into the conversation where gistline can never touch
+  // it, and scraped HTML is the largest single saving available. Only stdout is compressible.
+  const body = contentFor(findPlatform("claude"));
+  assert.match(body, /Use the shell, not a built-in fetch tool/);
+  assert.match(body, /never be compressed/);
+  assert.match(body, /Only what arrives on stdout can be compressed/);
+});
+
+test("shell-fetch guidance covers the platforms people actually run on", () => {
+  // `curl` is not universal: PowerShell aliases it to Invoke-WebRequest with different semantics, and some images have
+  // neither. Naming one command would leave Windows users with something that does not work.
+  const body = contentFor(findPlatform("claude"));
+  assert.match(body, /curl -sL/, "macOS and Linux");
+  assert.match(body, /curl\.exe -sL/, "Windows, where curl is an alias");
+  assert.match(body, /Invoke-WebRequest .*-UseBasicParsing/, "PowerShell fallback");
+  assert.match(body, /wget -qO-/, "where curl is absent");
+});
+
+test("the instruction also covers built-in FILE reading, not just fetching", () => {
+  // Same failure mode: a built-in file read loads the whole file into the conversation uncompressed.
+  assert.match(contentFor(findPlatform("codex")), /built-in file-reading tool loads the whole thing/);
+});
+
+test("the instruction says WHEN to preserve, by what the person asked for", () => {
+  // Preserve must be driven by intent rather than by file type, and a flag nobody knows when to set is a flag nobody sets.
+  const body = contentFor(findPlatform("cursor"));
+  assert.match(body, /--preserve/);
+  assert.match(body, /only when the answer has to go back into a document/i);
+  // The concrete phrasings, which are what make it actionable.
+  assert.match(body, /change this in my PDF/);
+  assert.match(body, /here are the files for context/);
+});
+
+test("the default is stated as the default, so preserve is not treated as better", () => {
+  const body = contentFor(findPlatform("claude"));
+  assert.match(body, /By default gistline returns the \*\*information\*\*/);
+  assert.match(body, /Feeding a document as background information is the common case/);
+});
+
+test("every platform receives the fetch and mode guidance, not just one", () => {
+  // The guidance lives in the shared instruction text, so a platform-specific wrapper must not drop it.
+  for (const p of PLATFORMS) {
+    const body = contentFor(p);
+    assert.match(body, /curl -sL/, `${p.id} is missing the fetch guidance`);
+    assert.match(body, /--preserve/, `${p.id} is missing the mode guidance`);
+  }
+});

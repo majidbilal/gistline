@@ -108,10 +108,10 @@ test("GATE: a real multi-sheet workbook converts, with sheet names and correct c
   assert.equal(sheets, 2);
   assert.match(md, /^## Q3 Sales/m);
   assert.match(md, /^## Notes/m);
-  assert.match(md, /\| Region \| Revenue \| Closed \|/);
+  assert.match(md, /Region,Revenue,Closed/);
   // 45658 is 2025-01-01, so 45872 is 214 days later: 2025-08-03. My first expectation here said 08-04, and the
   // implementation was right — worth recording, because the arithmetic is easy to get wrong in either direction.
-  assert.match(md, /\| North \| 1200\.5 \| 2025-08-03 \|/);
+  assert.match(md, /North,1200\.5,2025-08-03/);
 });
 
 // --- risk 1: inline strings vs shared strings ---------------------------------------------------------------

@@ -109,6 +109,47 @@ npx gistline --file <path> --budget 2000
 npx gistline --file report.pdf
 \`\`\`
 
+### Fetching a web page
+
+**Use the shell, not a built-in fetch tool.** A built-in fetch puts the page straight into the conversation, where it can
+never be compressed — and scraped HTML is the single largest saving available, around 95%, because only about 10-15% of its
+tokens are content.
+
+Only what arrives on stdout can be compressed, so route the fetch through the shell and pipe it:
+
+\`\`\`
+# macOS, Linux
+curl -sL "<url>" | npx gistline --label page
+
+# Windows PowerShell
+curl.exe -sL "<url>" | npx gistline --label page
+# or, if curl.exe is unavailable:
+(Invoke-WebRequest -Uri "<url>" -UseBasicParsing).Content | npx gistline --label page
+
+# where curl is absent
+wget -qO- "<url>" | npx gistline --label page
+\`\`\`
+
+The same applies to reading a file: a built-in file-reading tool loads the whole thing into the conversation, where
+\`npx gistline --file <path>\` would have compressed it first.
+
+### When to preserve a document's formatting
+
+By default gistline returns the **information** in a document, not its presentation — because the usual reason to read a
+document is to learn what it says. That output is around 25% smaller on anything containing a table.
+
+Pass \`--preserve\` **only when the answer has to go back into a document**, which is signalled by what was asked for:
+
+| The person said | Use |
+|---|---|
+| "what does this contract say", "summarise the deck", "here is the spec" | the default |
+| "here are the files for context", "use this data" | the default |
+| "change this in my PDF", "update the spreadsheet", "rewrite this section" | \`--preserve\` |
+| "reformat", "regenerate the document", "keep the layout" | \`--preserve\` |
+
+Feeding a document as background information is the common case and the default serves it. Editing a document is the
+exception, and \`--preserve\` keeps the table and heading structure a rewrite needs.
+
 ### What to expect
 
 - Output is prefixed with a note stating what was compressed and by how much.

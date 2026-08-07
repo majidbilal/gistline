@@ -1,6 +1,6 @@
 {
   "name": "gistline",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Compress large command output, logs and documents before an AI assistant reads them - and know whether anything was removed. Zero dependencies, deterministic, with the original always retrievable.",
   "type": "module",
   "license": "MIT",

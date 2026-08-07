@@ -86,8 +86,8 @@ test("GATE: a deck converts with titles, bullets, a table and notes", () => {
   assert.equal(withNotes, 1);
   assert.match(md, /^## Quarterly Review/m);
   assert.match(md, /^- Revenue up\n- Costs flat/m);
-  assert.match(md, /\| Region \| Total \|/);
-  assert.match(md, /\| North \| 1200 \|/);
+  assert.match(md, /Region,Total/);
+  assert.match(md, /North,1200/);
 });
 
 // --- risk 1: slide order is not file order -----------------------------------------------------------------

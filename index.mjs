@@ -383,8 +383,8 @@ export function formatGistStats(snap) {
  * The returned shape is `gist`'s, plus what conversion did. A caller that only cares about the text ignores the extra
  * fields; a caller deciding whether to trust the output can see that a spreadsheet was read and what was left out.
  */
-export function gistFile(input, { name = "", ...opts } = {}) {
-  const ingested = ingest(input, { name });
+export function gistFile(input, { name = "", mode = "information", ...opts } = {}) {
+  const ingested = ingest(input, { name, mode });
 
   // Nothing to compress. Returned in the same shape rather than as a special case, for the reason the early-return path
   // in `gist` was fixed: a function whose result shape depends on its input is a trap.

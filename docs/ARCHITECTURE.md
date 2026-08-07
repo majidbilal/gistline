@@ -37,10 +37,10 @@ list, not because any transform checks. No individual transform can get the rule
 | | Count |
 |---|---|
 | Source modules | 31 |
-| Source lines | 7,037 |
-| Test files | 25 |
-| Import edges across the repo | 188 |
-| Distinct symbols | 928 |
+| Source lines | 7,182 |
+| Test files | 26 |
+| Import edges across the repo | 197 |
+| Distinct symbols | 944 |
 | Runtime dependencies | **0** |
 | Node built-ins used | node:assert/strict, node:child_process, node:crypto, node:fs, node:os, node:path, node:test, node:url, node:zlib |
 
@@ -50,9 +50,9 @@ What a caller touches. Everything below is reachable from here and nothing here 
 
 | Module | Lines | Imports | Imported by |
 |---|---|---|---|
-| [`cli.mjs`](../cli.mjs) | 223 | 3 | — |
+| [`cli.mjs`](../cli.mjs) | 269 | 4 | — |
 | [`index.mjs`](../index.mjs) | 415 | 3 | 3 |
-| [`install.mjs`](../install.mjs) | 458 | — | 1 |
+| [`install.mjs`](../install.mjs) | 499 | — | 1 |
 | [`mcp.mjs`](../mcp.mjs) | 284 | 2 | — |
 
 ## core/
@@ -64,7 +64,7 @@ Orchestration and shared state. Decides what runs and in what order; transforms 
 | [`core/context.mjs`](../core/context.mjs) | 92 | 1 | 1 |
 | [`core/doc.mjs`](../core/doc.mjs) | 85 | — | 6 |
 | [`core/ingest.mjs`](../core/ingest.mjs) | 243 | 8 | 1 |
-| [`core/markdown.mjs`](../core/markdown.mjs) | 90 | 1 | 2 |
+| [`core/markdown.mjs`](../core/markdown.mjs) | 148 | 1 | 2 |
 | [`core/pipeline.mjs`](../core/pipeline.mjs) | 111 | — | 1 |
 
 ## transforms/
@@ -75,7 +75,7 @@ One transformation each. A transform never decides whether it should run — the
 |---|---|---|---|
 | [`transforms/docx.mjs`](../transforms/docx.mjs) | 288 | 2 | 1 |
 | [`transforms/html.mjs`](../transforms/html.mjs) | 337 | 3 | 2 |
-| [`transforms/legacy.mjs`](../transforms/legacy.mjs) | 120 | 4 | — |
+| [`transforms/legacy.mjs`](../transforms/legacy.mjs) | 120 | 4 | 1 |
 | [`transforms/pdf-classify.mjs`](../transforms/pdf-classify.mjs) | 208 | — | 2 |
 | [`transforms/pdf-columns.mjs`](../transforms/pdf-columns.mjs) | 182 | — | 1 |
 | [`transforms/pdf-running.mjs`](../transforms/pdf-running.mjs) | 204 | — | 1 |

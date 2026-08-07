@@ -1,7 +1,58 @@
 # Changelog
 
 Dates are the release date. Numbers quoted here are measured by the demos in this repository and reproduce with
-`node demo.mjs`, `node demo-xlsx.mjs` and `node demo-pdf.mjs`.
+`npm run demo`, `npm run demo-xlsx` and `npm run demo-pdf`.
+
+## 0.4.0
+
+### Information is the default output; presentation is opt-in
+
+The purpose of reading a document is almost always to learn what it says, not to rebuild it. The default output now carries
+the content and drops the presentation, and reconstruction is asked for with `--preserve`.
+
+**Which parts of Markdown are overhead was measured, not assumed.** On a realistic report:
+
+| | Share of output | Decision |
+|---|---|---|
+| Table delimiters and padding | **28.7%** | replaced with a dense form |
+| Separator row | 1.4% | dropped — it carries nothing |
+| Heading and list markers | 0.6% | **kept** — a heading level is information, and nearly free |
+
+Measured saving: **23.3%** on a mixed report, **26.2%** on a spreadsheet, **25.3%** on a wide table, **0%** on pure prose.
+Every value survives in both modes, and there is a test asserting it.
+
+`--preserve` is documented by **intent** rather than by file type in what gistline installs — "change this in my PDF" takes
+it, "here are the files for context" does not — because a flag nobody knows when to set is a flag nobody sets.
+
+### Fixed: `gistline --file <document>` printed the raw archive
+
+The CLI read every file with `readFileSync(file, "utf8")` and passed it to the text path, so `gistline --file report.docx`
+emitted the ZIP archive as mojibake — while document reading had worked through the API for days and the README documented
+exactly that command.
+
+Nothing caught it because every test exercised `ingest` directly and the smoke test used the API. **The command a person
+actually types was the one path with no coverage.** There is now a CLI test file covering all five formats, both output
+modes, refusals, `--json`, `--stats` and stdin.
+
+### Guidance on fetching
+
+What gistline installs now tells the assistant to fetch web pages **through the shell** rather than with a built-in fetch
+tool. A built-in fetch puts the page straight into the conversation where it can never be compressed, and scraped HTML is
+the largest saving available. Commands are given for macOS, Linux, Windows `curl.exe`, PowerShell `Invoke-WebRequest` and
+`wget`, because naming only one would leave most users with something that does not work.
+
+### Pre-tool hooks
+
+`gistline install` writes a hook for Claude Code, Gemini CLI and CodeBuddy that speaks up before a command likely to
+produce large output. It **advises rather than rewrites**, never blocks, merges into an existing `settings.json` without
+destroying it, and restores that file byte-identically on uninstall. Opt out with `--no-hooks`.
+
+### Structure
+
+Root reduced from 28 files to 17, with `scripts/`, `hooks/`, `docs/`, and a gitignored `docs/internal/` for working plans.
+`docs/ARCHITECTURE.md` is generated from the real import graph by `npm run architecture`, so it cannot drift from the code.
+
+429 tests.
 
 ## 0.3.0
 
