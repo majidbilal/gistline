@@ -20,6 +20,8 @@ import { readPptx } from "../transforms/pptx.mjs";
 import { looksLikeHtml, readHtml } from "../transforms/html.mjs";
 import { classifyPdf, describePdf } from "../transforms/pdf-classify.mjs";
 import { readPdf } from "../transforms/pdf.mjs";
+// OCR: an OPTIONAL adapter. With Tesseract absent, every path here behaves exactly as it did before OCR existed.
+import { ocrImage, ocrAdvice, imageFormat } from "../util/ocr.mjs";
 import { toMarkdown } from "./markdown.mjs";
 
 /** What ingestion produced, and what it could not. */
@@ -39,8 +41,48 @@ const HANDLED = [
     test: (buf) => buf.length > 4 && buf.subarray(0, 5).toString("latin1") === "%PDF-",
     handler: convertPdf,
   },
+  {
+    /**
+     * An image is READ when Tesseract happens to be installed, and refused exactly as before when it is not.
+     *
+     * This is the optional-adapter rule in practice: gistline bundles nothing and installs nothing, so with Tesseract
+     * absent every byte of behaviour is what it was before OCR existed. There is a test asserting that refusal is
+     * unchanged.
+     */
+    id: "image",
+    test: (buf) => imageFormat(buf) !== null,
+    handler: convertImage,
+  },
 ];
 
+/**
+ * An image: OCR it if Tesseract is there, refuse as before if not.
+ *
+ * The refusal text keeps the fact that matters about images regardless — token cost is driven by PIXEL DIMENSIONS, so
+ * resizing before sending reduces cost directly, with no OCR involved at all. That was the useful half of the old message
+ * and it stays.
+ */
+function convertImage(buf, name, mode) {
+  const r = ocrImage(buf);
+
+  if (!r.ok) {
+    throw new UnsupportedFormat(
+      "image",
+      `${name ? `"${name}"` : "This image"} could not be read as text. ${ocrAdvice({ isPdf: false })}`
+      + " Note that an image's token cost is driven by its pixel dimensions, so resizing it before sending reduces cost"
+      + ` directly.${r.available && r.reason ? ` (${r.reason})` : ""}`,
+    );
+  }
+
+  return result(r.text, "image", {
+    notes: [
+      `Text recognised by Tesseract ${r.version}. OCR output contains errors — verify anything that matters against the image.`,
+      "Layout, tables and reading order are not recovered; this is the text Tesseract found, in the order it found it.",
+    ],
+    converted: true,
+    original: buf.length,
+  });
+}
 /**
  * Formats recognised but deliberately not read.
  *
@@ -56,18 +98,8 @@ const REFUSALS = [
       "This is a pre-2007 Office file (.doc, .xls or .ppt), which is a binary compound document rather than a ZIP of "
       + "XML. Re-save it as .docx, .xlsx or .pptx and gistline can read it.",
   },
-  {
-    id: "image",
-    test: (buf) =>
-      (buf.length > 8 && buf.subarray(0, 8).toString("hex") === "89504e470d0a1a0a") ||
-      (buf.length > 3 && buf.subarray(0, 3).toString("hex") === "ffd8ff") ||
-      (buf.length > 6 && buf.subarray(0, 6).toString("latin1").startsWith("GIF8")) ||
-      (buf.length > 12 && buf.subarray(0, 4).toString("latin1") === "RIFF" && buf.subarray(8, 12).toString("latin1") === "WEBP"),
-    why:
-      "This is an image. Reading text from it needs OCR, which requires a model and would end this tool's "
-      + "zero-dependency guarantee. Note that an image's token cost is driven by its pixel dimensions, so resizing it "
-      + "before sending reduces cost directly.",
-  },
+  // Images used to be refused here. They are now in HANDLED, because they may succeed when Tesseract is installed — and a
+  // refusal entry can only ever refuse. Leaving both would have made this one dead code that still looked authoritative.
 ];
 
 /** Thrown when a format is recognised and deliberately not read. Carries the reason, so a caller can show it. */
@@ -107,13 +139,19 @@ function convertPdf(buf, name, mode) {
     const where = name ? `"${name}"` : "This PDF";
     const next = {
       encrypted: "Remove the password and try again.",
-      scanned: "It needs OCR, which requires a model. Run it through an OCR tool first and gistline will compress the result.",
+      // The OCR advice comes from the adapter, so it differs by whether Tesseract is actually installed — and for a PDF it
+      // names the rasterisation step too, because Tesseract reads images rather than PDFs and "install Tesseract" alone
+      // would send someone to a tool that still cannot do the job.
+      scanned: ocrAdvice({ isPdf: true }),
       damaged: "The file appears truncated. Try re-downloading or re-exporting it.",
       "not-pdf": "The bytes do not start with a PDF header.",
-      unreadable: "Try an OCR tool, which can read the glyphs as images even when their character mapping is missing.",
+      unreadable: `${ocrAdvice({ isPdf: true })} OCR can read the glyphs as images even when their character mapping is missing.`,
     }[e.verdict] ?? "";
 
-    throw new UnsupportedFormat("pdf", `${where}: ${e.message} ${next}`.trim());
+    // Joined with a full stop, because the classifier's reason does not end with one and the advice starts a new sentence.
+    // Without this the two run together as "…this is a scan It needs OCR", which reads as a typo.
+    const message = `${where}: ${e.message}`.replace(/\s*$/, "");
+    throw new UnsupportedFormat("pdf", next ? `${message.replace(/[.\s]*$/, "")}. ${next}` : message);
   }
 }
 

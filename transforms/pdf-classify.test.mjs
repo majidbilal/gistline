@@ -47,12 +47,16 @@ test("GATE: a born-digital PDF classifies as text, with usable signals", () => {
   assert.match(c.reason, /usable font mapping/);
 });
 
-test("GATE: a scan is identified as needing OCR", () => {
+test("GATE: a scan is identified as such, with the evidence", () => {
   // No text operators, image draws only.
+  //
+  // The classifier states the EVIDENCE and stops there. Advice about OCR is added by whoever reports the refusal, so that
+  // it can differ by whether Tesseract is actually installed — and so it is not said twice in one sentence.
   const c = classifyPdf(pdf({ content: "q 612 0 0 792 0 0 cm /Im1 Do Q", fonts: "/BaseFont /None" }));
   assert.equal(c.verdict, "scanned");
   assert.ok(c.imageOps > 0);
-  assert.match(c.reason, /needs OCR/);
+  assert.match(c.reason, /this is a scan/);
+  assert.match(c.reason, /image draw\(s\)/, "the evidence, not just the conclusion");
 });
 
 test("GATE: an encrypted PDF is named as encrypted, and nothing else is claimed about it", () => {

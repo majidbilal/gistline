@@ -171,7 +171,9 @@ export function classifyPdf(buffer) {
       ...signals,
       verdict: "scanned",
       reason: imageOps > 0
-        ? `no text operators and ${imageOps} image draw(s) in uncompressed content: this is a scan and needs OCR`
+        // The advice that follows says "it needs OCR", so this states the EVIDENCE and stops there. Saying it in both
+        // places produced "…this is a scan and needs OCR It needs OCR…", which reads as carelessness.
+        ? `no text operators and ${imageOps} image draw(s) in uncompressed content: this is a scan`
         : "no text operators found in uncompressed content: there is no text layer to extract",
     };
   }
