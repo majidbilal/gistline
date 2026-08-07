@@ -83,7 +83,7 @@ Two stages, and the order is the whole design.
 | Build log, six message formats | the format words, and the timestamps | **67.5% smaller**, every line reconstructible |
 | 12-page PDF | the running header, 12 times | stated once, 24 lines of furniture removed |
 | Scraped HTML page | markup, scripts, navigation, styling | **95.8% smaller**, all text kept |
-| Spreadsheet | column headers per row, XML per cell | **94.1% smaller** end to end |
+| Spreadsheet | column headers per row, XML per cell | **84.6% smaller** end to end, and lossless throughout |
 
 **Stage two removes things — but only from what is left, and only when the budget still is not met.**
 

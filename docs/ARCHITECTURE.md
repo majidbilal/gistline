@@ -36,11 +36,11 @@ list, not because any transform checks. No individual transform can get the rule
 
 | | Count |
 |---|---|
-| Source modules | 33 |
-| Source lines | 8,206 |
-| Test files | 28 |
-| Import edges across the repo | 209 |
-| Distinct symbols | 1,035 |
+| Source modules | 34 |
+| Source lines | 8,494 |
+| Test files | 29 |
+| Import edges across the repo | 215 |
+| Distinct symbols | 1,055 |
 | Runtime dependencies | **0** |
 | Node built-ins used | node:assert/strict, node:child_process, node:crypto, node:fs, node:os, node:path, node:test, node:url, node:zlib |
 
@@ -73,10 +73,11 @@ One transformation each. A transform never decides whether it should run — the
 
 | Module | Lines | Imports | Imported by |
 |---|---|---|---|
-| [`transforms/columnar.mjs`](../transforms/columnar.mjs) | 277 | — | 1 |
+| [`transforms/columnar.mjs`](../transforms/columnar.mjs) | 277 | — | 2 |
 | [`transforms/docx.mjs`](../transforms/docx.mjs) | 405 | 2 | 1 |
 | [`transforms/html.mjs`](../transforms/html.mjs) | 337 | 3 | 2 |
-| [`transforms/legacy.mjs`](../transforms/legacy.mjs) | 120 | 4 | 1 |
+| [`transforms/legacy.mjs`](../transforms/legacy.mjs) | 125 | 5 | 1 |
+| [`transforms/md-tables.mjs`](../transforms/md-tables.mjs) | 283 | 2 | 1 |
 | [`transforms/pdf-classify.mjs`](../transforms/pdf-classify.mjs) | 210 | — | 2 |
 | [`transforms/pdf-columns.mjs`](../transforms/pdf-columns.mjs) | 182 | — | 1 |
 | [`transforms/pdf-running.mjs`](../transforms/pdf-running.mjs) | 204 | — | 1 |
@@ -95,7 +96,7 @@ Shared primitives with exactly one implementation. Each exists because two consu
 | Module | Lines | Imports | Imported by |
 |---|---|---|---|
 | [`util/escape.mjs`](../util/escape.mjs) | 143 | — | 3 |
-| [`util/lines.mjs`](../util/lines.mjs) | 115 | — | 2 |
+| [`util/lines.mjs`](../util/lines.mjs) | 115 | — | 3 |
 | [`util/mask.mjs`](../util/mask.mjs) | 114 | — | 1 |
 | [`util/ocr.mjs`](../util/ocr.mjs) | 180 | — | 1 |
 | [`util/pdffont.mjs`](../util/pdffont.mjs) | 364 | 1 | 1 |
@@ -122,12 +123,12 @@ worth a round-trip test and a second read.
 | [`util/unzip.mjs`](../util/unzip.mjs) | **4** | `core/ingest.mjs`, `transforms/docx.mjs`, `transforms/pptx.mjs`, `transforms/xlsx.mjs` |
 | [`index.mjs`](../index.mjs) | **3** | `cli.mjs`, `mcp.mjs`, `transforms/legacy.mjs` |
 | [`util/escape.mjs`](../util/escape.mjs) | **3** | `lossless.mjs`, `transforms/html.mjs`, `transforms/templates.mjs` |
+| [`util/lines.mjs`](../util/lines.mjs) | **3** | `core/context.mjs`, `transforms/md-tables.mjs`, `transforms/templates.mjs` |
 | [`util/pdfobj.mjs`](../util/pdfobj.mjs) | **3** | `transforms/pdf-text.mjs`, `transforms/pdf.mjs`, `util/pdffont.mjs` |
 | [`core/markdown.mjs`](../core/markdown.mjs) | **2** | `core/ingest.mjs`, `transforms/html.mjs` |
 | [`store.mjs`](../store.mjs) | **2** | `cli.mjs`, `mcp.mjs` |
+| [`transforms/columnar.mjs`](../transforms/columnar.mjs) | **2** | `transforms/md-tables.mjs`, `transforms/templates.mjs` |
 | [`transforms/html.mjs`](../transforms/html.mjs) | **2** | `core/ingest.mjs`, `transforms/legacy.mjs` |
-| [`transforms/pdf-classify.mjs`](../transforms/pdf-classify.mjs) | **2** | `core/ingest.mjs`, `transforms/pdf.mjs` |
-| [`util/lines.mjs`](../util/lines.mjs) | **2** | `core/context.mjs`, `transforms/templates.mjs` |
 
 ## Health
 
@@ -176,4 +177,4 @@ Tests sit beside the module they test: `core/pipeline.mjs` has `core/pipeline.te
 
 ---
 
-*33 source modules · regenerate with `npm run architecture`*
+*34 source modules · regenerate with `npm run architecture`*

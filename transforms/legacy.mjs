@@ -94,13 +94,18 @@ export const lastResort = {
 import { tables } from "./tables.mjs";
 import { templates, templateRows } from "./templates.mjs";
 import { html } from "./html.mjs";
+import { mdTables } from "./md-tables.mjs";
 
 export const TRANSFORMS = [
   // CONVERSION, first. It changes the FORMAT, and everything after it operates on the result — a compressor running
   // before conversion would be compressing markup.
   html,
   // LOSSLESS, cheapest first. A document that fits after these never reaches anything lossy.
+  //
+  // `md-tables` runs after `html` deliberately: conversion produces Markdown tables, and this is what compacts them. Before
+  // it existed, a spreadsheet reached Markdown losslessly and then the only reduction left was the lossy log path.
   tables,
+  mdTables,
   templates,
   // LOSSY, structure-aware. Understands what the lossless step produced, so it can reduce further without breaking it.
   templateRows,
