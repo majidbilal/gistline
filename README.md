@@ -83,8 +83,8 @@ $ npm test 2>&1 | npx gistline --kind test --label suite
 # fail 0
 ```
 
-The 1,004 passing lines are gone. **The failures never are** — and the original is retrievable by id, so nothing is
-actually lost.
+The 1,004 passing lines are gone. **The failures never are** — and the id in that note fetches the original back, byte for
+byte, so nothing is actually lost. [How retrieval works](#getting-the-original-back)
 
 ---
 
@@ -127,13 +127,53 @@ into the same budget than dropping lines from the start would.
 Those two are completely different facts, and a compressor that cannot tell you which one you have is a compressor you
 cannot trust with a build log.
 
-**And the original is always recoverable:**
+### Getting the original back
+
+**The id is printed in the note, on the first line of every compressed result:**
 
 ```
-gistline retrieve dd0fd19eb38f9210    # the whole thing, byte for byte
-gistline slice    dd0fd19eb38f9210 --from-line 400 --lines 50
-gistline grep     dd0fd19eb38f9210 "AssertionError"
+$ gistline run npm test
+[npm test output compressed: 91,921 → 132 chars. Full output retained as id 092d1b24d287fa0a
+ — retrieve, slice, or grep it for any dropped detail.]
 ```
+
+That `092d1b24d287fa0a` is the id. Then:
+
+```
+gistline retrieve 092d1b24d287fa0a                          # the whole thing, byte for byte
+gistline slice    092d1b24d287fa0a --from-line 400 --lines 50
+gistline grep     092d1b24d287fa0a "AssertionError"
+```
+
+From the API it is `result.retrievalId`, and `null` when no store was used.
+
+### When you get an id, and when you do not
+
+| | Store | Why |
+|---|---|---|
+| `gistline run <command>` | **on by default** | it runs the command, so it knows the output is worth keeping. `--no-store` to opt out |
+| piped stdin | off unless `--store` | |
+| `gistline --file <path>` | off unless `--store` | the file is still on disk, so the original is not lost either way |
+
+**Without a store, the note says so rather than implying otherwise:**
+
+```
+$ cat build.log | gistline --budget 300
+[log output compressed: 5,000 → 452 chars. Some content was removed and no store was
+ configured, so it cannot be recovered — pass --store to retain the original.]
+```
+
+```
+$ cat build.log | gistline --budget 300 --store
+[log output compressed: 5,000 → 452 chars. Full output retained as id bc9d580ae18748b2
+ — retrieve, slice, or grep it for any dropped detail.]
+```
+
+Two separate facts, always both stated: **was anything removed**, and **can it be recovered**. A lossless result needs no
+store, because nothing was dropped in the first place.
+
+The store is a local directory — `GISTLINE_STORE`, defaulting to a temporary path — pruned by age and count. It holds
+originals in full, so set it somewhere appropriate if you compress anything sensitive.
 
 That is what makes aggressive compression safe. The 1,004 dropped test lines are one command away.
 
@@ -321,6 +361,10 @@ gistline uninstall [--platform P] [--project]       remove
 gistline status                                     verify what is registered
 gistline platforms                                  list all 23 assistants
 ```
+
+The `<id>` for retrieval comes from the note printed on the compressed output. `gistline run` keeps the original by
+default; add `--store` to anything else you want to be able to recover. See
+[retrieval](#getting-the-original-back).
 
 `--kind` overrides content detection: `test`, `log`, `diff`, `json`, `stacktrace`. Detection is usually right; the flag
 exists for when it is not.

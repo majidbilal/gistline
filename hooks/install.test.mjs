@@ -310,3 +310,36 @@ test("all five hook platforms are declared, and none claims support it lacks", (
   assert.deepEqual(flagged, ["claude", "codebuddy", "gemini", "kilo", "opencode"]);
   assert.deepEqual(flagged, Object.keys(HOOK_TARGETS).sort());
 });
+
+test("the instruction explains WHERE the retrieval id comes from", () => {
+  // The whole "nothing is lost" claim rests on retrieval, and the instruction told assistants that retrieval works without
+  // ever saying where the id comes from or that a store is needed for anything except `run`. An assistant told it can
+  // retrieve, with no way to obtain an id, will either invent one or stop trusting the claim.
+  const body = contentFor(findPlatform("claude"));
+
+  assert.match(body, /that is where the id comes from/i, "it must say the id is in the note");
+  assert.match(body, /Full output retained as id/, "with a worked example of the note");
+  assert.match(body, /npx gistline retrieve/, "and the command that uses it");
+});
+
+test("the instruction states when a store is and is not enabled", () => {
+  // `gistline run` keeps the original by default; piped input and --file do not. Without this, an assistant expects an id
+  // that will not be there and reports the tool as broken.
+  const body = contentFor(findPlatform("codex"));
+  assert.match(body, /keeps the original \*\*by default\*\*/);
+  assert.match(body, /add `--store`/);
+  assert.match(body, /cannot be recovered/, "and what the note says when it is absent");
+});
+
+test("the instruction says what to do when a detail is missing", () => {
+  // The actionable half: retrieve it rather than guessing or re-running the command.
+  const body = contentFor(findPlatform("cursor"));
+  assert.match(body, /Do not guess and do not re-run/);
+  assert.match(body, /npx gistline grep/);
+});
+
+test("every platform receives the retrieval guidance", () => {
+  for (const p of PLATFORMS) {
+    assert.match(contentFor(p), /retrieve/, `${p.id} is missing the retrieval guidance`);
+  }
+});

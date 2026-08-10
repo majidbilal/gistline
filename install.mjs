@@ -162,9 +162,30 @@ exception, and \`--preserve\` keeps the table and heading structure a rewrite ne
 - Output is prefixed with a note stating what was compressed and by how much.
 - The note says whether anything was **removed** or whether the content was only **restated more compactly**. A lossless
   result means every value is still present.
-- The full original is retained and addressable: \`npx gistline retrieve <id>\`, \`slice\`, or \`grep\` it. Nothing is ever
-  lost, so aggressive compression is safe.
+- **When the original was kept, the note contains its id**, and that is where the id comes from:
+
+  \`\`\`
+  [npm test output compressed: 91,921 → 132 chars. Full output retained as id 092d1b24d287fa0a
+   — retrieve, slice, or grep it for any dropped detail.]
+  \`\`\`
+
+  Then \`npx gistline retrieve 092d1b24d287fa0a\`, or \`slice\` it, or \`grep\` it.
+
+- \`gistline run\` keeps the original **by default**. For piped input or \`--file\`, add \`--store\` if you want it kept —
+  otherwise the note says plainly that the removed content cannot be recovered, rather than implying it can.
 - gistline **declines** when it cannot help. A refusal is a normal result, not an error.
+
+### If a detail is missing from compressed output
+
+Do not guess and do not re-run the command. Retrieve the original:
+
+\`\`\`
+npx gistline grep <id> "<what you are looking for>"
+npx gistline slice <id> --from-line 400 --lines 50
+\`\`\`
+
+If there is no id in the note, the content was either not removed at all — in which case it is already all there — or no
+store was configured, in which case re-run with \`--store\`.
 
 ### When not to use it
 
