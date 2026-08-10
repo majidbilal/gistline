@@ -171,8 +171,9 @@ exception, and \`--preserve\` keeps the table and heading structure a rewrite ne
 
   Then \`npx gistline retrieve 092d1b24d287fa0a\`, or \`slice\` it, or \`grep\` it.
 
-- \`gistline run\` keeps the original **by default**. For piped input or \`--file\`, add \`--store\` if you want it kept —
-  otherwise the note says plainly that the removed content cannot be recovered, rather than implying it can.
+- \`gistline\` keeps the original **by default**, so the id is there whenever something was actually removed. A lossless
+  result has no id because nothing was dropped — there is nothing to retrieve, and the note says so.
+- \`--no-store\` opts out. Keeping the original writes it to a local directory, so use that flag for anything sensitive.
 - gistline **declines** when it cannot help. A refusal is a normal result, not an error.
 
 ### If a detail is missing from compressed output
@@ -184,8 +185,8 @@ npx gistline grep <id> "<what you are looking for>"
 npx gistline slice <id> --from-line 400 --lines 50
 \`\`\`
 
-If there is no id in the note, the content was either not removed at all — in which case it is already all there — or no
-store was configured, in which case re-run with \`--store\`.
+If there is no id in the note, read what the note says: either nothing was removed — in which case it is all already
+there — or the original was not retained, in which case re-running without \`--no-store\` will keep it.
 
 ### When not to use it
 

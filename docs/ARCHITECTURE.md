@@ -37,10 +37,10 @@ list, not because any transform checks. No individual transform can get the rule
 | | Count |
 |---|---|
 | Source modules | 35 |
-| Source lines | 8,829 |
+| Source lines | 8,865 |
 | Test files | 29 |
-| Import edges across the repo | 221 |
-| Distinct symbols | 1,079 |
+| Import edges across the repo | 223 |
+| Distinct symbols | 1,083 |
 | Runtime dependencies | **0** |
 | Node built-ins used | node:assert/strict, node:child_process, node:crypto, node:fs, node:os, node:path, node:test, node:url, node:zlib |
 
@@ -50,9 +50,9 @@ What a caller touches. Everything below is reachable from here and nothing here 
 
 | Module | Lines | Imports | Imported by |
 |---|---|---|---|
-| [`cli.mjs`](../cli.mjs) | 376 | 4 | — |
-| [`index.mjs`](../index.mjs) | 431 | 3 | 3 |
-| [`install.mjs`](../install.mjs) | 619 | — | 1 |
+| [`cli.mjs`](../cli.mjs) | 387 | 4 | — |
+| [`index.mjs`](../index.mjs) | 434 | 3 | 3 |
+| [`install.mjs`](../install.mjs) | 641 | — | 1 |
 | [`mcp.mjs`](../mcp.mjs) | 284 | 2 | — |
 
 ## core/

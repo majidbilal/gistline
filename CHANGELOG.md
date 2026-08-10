@@ -3,6 +3,38 @@
 Dates are the release date. Numbers quoted here are measured by the demos in this repository and reproduce with
 `npm run demo`, `npm run demo-xlsx` and `npm run demo-pdf`.
 
+## 0.6.0
+
+### The original is kept by default
+
+**A behaviour change, and the reason is that the promise was conditional.**
+
+gistline's central claim is that nothing is lost: whatever was removed can be fetched back by id. But the store was
+*opt-in* for piped input and `--file`, and on only for `gistline run` — so the id a reader was told to use frequently was
+not there. An assistant reading "retrieve the original by id" would find none, and either invent one or conclude the tool
+was broken.
+
+Now every invocation retains the original, so the id is present whenever something was actually removed. A lossless result
+still stores nothing, because nothing was dropped and there is nothing to recover.
+
+**`--no-store` opts out.** Keeping the original means writing it to disk, and that is a real cost — so anyone compressing
+something sensitive has a switch, it is documented in the README, and [SECURITY.md](SECURITY.md) states plainly that
+compressed content is now on disk in full by default.
+
+The note wording changed with it: when the original was not retained it no longer advises passing `--store`, because that
+flag is now the default and reaching that branch means the caller declined it deliberately.
+
+### Documentation
+
+Where the retrieval id comes from is now explained, with a worked example, in both the README and the instruction gistline
+installs into 23 assistants. Neither had said it — both showed `gistline retrieve <id>` and left the reader to work out
+what `<id>` was.
+
+Also added: what to do when a detail is missing from compressed output. Retrieve it, rather than guessing or re-running
+the command.
+
+513 tests.
+
 ## 0.5.0
 
 ### Logs now compress as well as JSON

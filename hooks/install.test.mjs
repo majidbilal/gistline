@@ -322,13 +322,14 @@ test("the instruction explains WHERE the retrieval id comes from", () => {
   assert.match(body, /npx gistline retrieve/, "and the command that uses it");
 });
 
-test("the instruction states when a store is and is not enabled", () => {
-  // `gistline run` keeps the original by default; piped input and --file do not. Without this, an assistant expects an id
-  // that will not be there and reports the tool as broken.
+test("the instruction states that the original is kept by default, and how to opt out", () => {
+  // This asserted the OLD rule — store on for `run`, opt-in elsewhere — and failed when the default changed, correctly.
+  // Without the opt-out documented, an assistant compressing something sensitive has no way to know it can decline.
   const body = contentFor(findPlatform("codex"));
   assert.match(body, /keeps the original \*\*by default\*\*/);
-  assert.match(body, /add `--store`/);
-  assert.match(body, /cannot be recovered/, "and what the note says when it is absent");
+  assert.match(body, /--no-store` opts out/, "the escape hatch must be named");
+  assert.match(body, /sensitive/, "and why it exists");
+  assert.match(body, /lossless\s+result has no id/, "and why a lossless result has none");
 });
 
 test("the instruction says what to do when a detail is missing", () => {

@@ -307,10 +307,21 @@ if (!Number.isFinite(budget) || budget < 100) {
   process.exit(2);
 }
 
-// `--store` with no value falls back to the default directory.
-const store = has("store")
-  ? openStore({ dir: (flag("store") ?? "").startsWith("--") ? DEFAULT_STORE_DIR : flag("store") ?? DEFAULT_STORE_DIR })
-  : null;
+// `--store <dir>` chooses the directory; `--store` alone falls back to the default.
+/**
+ * The original is kept BY DEFAULT, so "nothing is lost" needs no qualification.
+ *
+ * It used to be opt-in for piped input and `--file`, and on only for `run`. That made the tool's central promise
+ * conditional in a way nobody would guess: an assistant reading "retrieve the original by id" would find no id, and either
+ * invent one or conclude the tool was broken.
+ *
+ * The cost of keeping it is one file write to a directory that is already pruned by age and count. The real cost is
+ * privacy, not performance — compressing something sensitive now persists it to disk — so `--no-store` opts out, the note
+ * says which happened, and README and SECURITY say so plainly.
+ */
+const store = has("no-store")
+  ? null
+  : openStore({ dir: (flag("store") ?? "").startsWith("--") ? DEFAULT_STORE_DIR : flag("store") ?? DEFAULT_STORE_DIR });
 
 const common = {
   budget,

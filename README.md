@@ -145,35 +145,37 @@ gistline slice    092d1b24d287fa0a --from-line 400 --lines 50
 gistline grep     092d1b24d287fa0a "AssertionError"
 ```
 
-From the API it is `result.retrievalId`, and `null` when no store was used.
+From the API it is `result.retrievalId`.
 
-### When you get an id, and when you do not
+### The original is kept by default
 
-| | Store | Why |
-|---|---|---|
-| `gistline run <command>` | **on by default** | it runs the command, so it knows the output is worth keeping. `--no-store` to opt out |
-| piped stdin | off unless `--store` | |
-| `gistline --file <path>` | off unless `--store` | the file is still on disk, so the original is not lost either way |
-
-**Without a store, the note says so rather than implying otherwise:**
+Every compression retains the original, so the id is always there when something was actually removed. No flag needed.
 
 ```
 $ cat build.log | gistline --budget 300
-[log output compressed: 5,000 → 452 chars. Some content was removed and no store was
- configured, so it cannot be recovered — pass --store to retain the original.]
-```
-
-```
-$ cat build.log | gistline --budget 300 --store
 [log output compressed: 5,000 → 452 chars. Full output retained as id bc9d580ae18748b2
  — retrieve, slice, or grep it for any dropped detail.]
 ```
 
-Two separate facts, always both stated: **was anything removed**, and **can it be recovered**. A lossless result needs no
-store, because nothing was dropped in the first place.
+**A lossless result gets no id, because nothing was dropped** — there is nothing to retrieve, and the note says so:
 
-The store is a local directory — `GISTLINE_STORE`, defaulting to a temporary path — pruned by age and count. It holds
-originals in full, so set it somewhere appropriate if you compress anything sensitive.
+```
+[compressed 50,676 → 16,249 chars. Nothing was removed; the content is only stated more compactly.]
+```
+
+**`--no-store` opts out.** Keeping the original means writing it to disk, so if you are compressing something sensitive
+that is the switch:
+
+```
+$ cat secrets.log | gistline --budget 300 --no-store
+[log output compressed: 5,000 → 452 chars. Some content was removed and it was not retained,
+ so it cannot be recovered.]
+```
+
+`--store <dir>` puts it somewhere specific. The default is `GISTLINE_STORE`, or a temporary directory, pruned by age and
+count.
+
+Two separate facts, always both stated: **was anything removed**, and **can it be recovered**.
 
 That is what makes aggressive compression safe. The 1,004 dropped test lines are one command away.
 
@@ -362,9 +364,8 @@ gistline status                                     verify what is registered
 gistline platforms                                  list all 23 assistants
 ```
 
-The `<id>` for retrieval comes from the note printed on the compressed output. `gistline run` keeps the original by
-default; add `--store` to anything else you want to be able to recover. See
-[retrieval](#getting-the-original-back).
+The `<id>` for retrieval comes from the note printed on the compressed output. The original is kept **by default** —
+`--no-store` opts out, `--store <dir>` chooses where. See [retrieval](#getting-the-original-back).
 
 `--kind` overrides content detection: `test`, `log`, `diff`, `json`, `stacktrace`. Detection is usually right; the flag
 exists for when it is not.

@@ -56,15 +56,28 @@ A small file can declare an enormous one. These are bounded:
 
 If you find an input that makes gistline hang or exhaust memory, that is a vulnerability and worth reporting.
 
-### The local store
+### The local store, which is now on by default
 
-Originals are written to a local directory (`GISTLINE_STORE`, defaulting to a temporary directory) so that compressed
-output can be reversed. That means **compressed content is on disk in full**.
+Originals are written to a local directory so that compressed output can be reversed. **This is enabled by default** as of
+0.6.0 — previously it was opt-in, which made the tool's central promise conditional in a way nobody would guess.
+
+That means **compressed content is on disk in full**.
 
 - Entries are named by a content hash and pruned by age and count.
 - Nothing is uploaded anywhere.
-- If you compress secrets, they are in that directory until it is pruned. Set `GISTLINE_STORE` to a location with
-  appropriate permissions, or delete it after use.
+- **If you compress secrets, they are in that directory until it is pruned.**
+
+Two ways to control it:
+
+```
+gistline --no-store          do not retain the original at all
+GISTLINE_STORE=/secure/path  put it somewhere with appropriate permissions
+gistline --store /path       the same, per invocation
+```
+
+The note always says which happened, so you can tell from the output whether an original was retained.
+
+A lossless result stores nothing, because nothing was removed and there is nothing to recover.
 
 ### What is deliberately absent
 

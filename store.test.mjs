@@ -30,8 +30,10 @@ test("without a store, the note promises only what it can deliver", () => {
    * this tool exists to avoid, and it was doing it in the one line a reader always sees.
    */
   if (res.lossy) {
-    assert.match(res.note, /removed and no store was configured/, "a lossy result without a store must say so");
-    assert.match(res.note, /--store/, "and say what would fix it");
+    assert.match(res.note, /was not retained, so it cannot be recovered/, "a lossy result with no store must say so");
+    // It must NOT advise passing `--store`: that was the fix while the store was opt-in, and it is on by default now, so
+    // reaching this branch means the caller declined it deliberately.
+    assert.ok(!res.note.includes("--store"), "it must not suggest a flag the caller already declined");
   } else {
     assert.match(res.note, /Nothing was removed/);
   }

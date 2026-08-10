@@ -333,7 +333,10 @@ export function gist(text, { budget = DEFAULT_BUDGET, maxTokens = null, kind = n
   const retrieval = retrievalId
     ? `Full output retained as id ${retrievalId} — retrieve, slice, or grep it for any dropped detail.`
     : lossy
-      ? "Some content was removed and no store was configured, so it cannot be recovered — pass --store to retain the original."
+      // "pass --store" was the advice while the store was opt-in. It is on by default now, so reaching this branch means
+      // someone passed --no-store or the store failed — and telling them to pass a flag they deliberately declined would be
+      // wrong. Stating the consequence is the useful part.
+      ? "Some content was removed and it was not retained, so it cannot be recovered."
       : "Nothing was removed; the content is only stated more compactly.";
   const note = `[${label || detected} output compressed: ${raw.length} → ${body.length} chars. ${retrieval}]`;
 

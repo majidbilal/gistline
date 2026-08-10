@@ -2,9 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { deflateSync, deflateRawSync, crc32 } from "node:zlib";
-import { writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { writeFileSync, mkdtempSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 
 // The CLI, exercised as a person actually uses it.
 //
@@ -323,4 +323,69 @@ test("run prefers a direct spawn, falling back to the shell only when the comman
   // the alternative is not working at all. A quoted argument must survive.
   const out = run(["run", "--budget", "2000", process.execPath, "-e", "process.stdout.write('spaces  and  quotes \"kept\"')"]);
   assert.match(out, /spaces {2}and {2}quotes "kept"/, "exact quoting must survive the direct path");
+});
+
+// --- the store is on by default ----------------------------------------------------------------------------
+//
+// It used to be opt-in for piped input and `--file`, and on only for `run` — so the tool's central promise, that the
+// original can always be fetched back, was conditional in a way nobody would guess. An assistant reading "retrieve by id"
+// would find no id and either invent one or conclude the tool was broken.
+
+test("piped input keeps the original by default, and prints its id", () => {
+  const out = run(["--kind", "log", "--budget", "300"], { input: "y".repeat(5000) });
+  assert.match(out, /Full output retained as id [0-9a-f]{16}/, "an id must be issued without asking");
+});
+
+test("--file keeps the original by default", () => {
+  // A document large enough to ACTUALLY be compressed. The small fixture above is under any sensible budget, so gistline
+  // returns it untouched and issues no id — correctly, since nothing was removed and there is nothing to retrieve. My first
+  // version of this test asserted an id for content that needed no compression.
+  const big = at("big.docx", zipOf([["word/document.xml",
+    `<w:document><w:body>${Array.from({ length: 200 }, (i0, i) =>
+      `<w:p><w:r><w:t>Paragraph ${i} of a long document.</w:t></w:r></w:p>`).join("")}</w:body></w:document>`]]));
+
+  const out = run(["--file", big, "--budget", "300"]);
+  assert.match(out, /retained as id/);
+});
+
+test("run keeps the original by default, as it always did", () => {
+  const out = run(["run", "--budget", "300", process.execPath, "-e", "process.stdout.write('x'.repeat(5000))"]);
+  assert.match(out, /retained as id/);
+});
+
+test("--no-store opts out, and the note stops promising retrieval", () => {
+  // The privacy escape hatch: keeping the original writes it to disk, and someone compressing something sensitive needs a
+  // way to decline.
+  const out = run(["--kind", "log", "--budget", "300", "--no-store"], { input: "y".repeat(5000) });
+  assert.ok(!out.includes("retained as id"), "it must not claim a retrieval it did not make");
+  assert.match(out, /was not retained, so it cannot be recovered/);
+  // And it must not tell the caller to pass a flag they deliberately declined.
+  assert.ok(!out.includes("--store"), "advising --store here would be wrong");
+});
+
+test("the id printed by the CLI actually retrieves the original", () => {
+  // End to end, through the binary: the promise is only real if the id works.
+  const input = `${"ok - passing\n".repeat(500)}not ok 501 - AssertionError\n`;
+  const compressed = run(["--kind", "test", "--budget", "300"], { input });
+
+  const id = (compressed.match(/retained as id ([0-9a-f]{16})/) ?? [])[1];
+  assert.ok(id, `no id in the note: ${compressed.slice(0, 160)}`);
+
+  const original = run(["retrieve", id]);
+  assert.equal(original.trimEnd(), input.trimEnd(), "the retrieved original must be byte-identical");
+});
+
+test("grep works on the retrieved original, not just retrieve", () => {
+  const input = `${"ok - passing\n".repeat(500)}not ok 501 - AssertionError: boom\n`;
+  const id = (run(["--kind", "test", "--budget", "300"], { input }).match(/retained as id ([0-9a-f]{16})/) ?? [])[1];
+  assert.ok(id);
+  assert.match(run(["grep", id, "AssertionError"]), /not ok 501 - AssertionError: boom/);
+});
+
+test("--store <dir> still chooses where the original goes", () => {
+  // The flag keeps its old meaning for anyone who wants a specific location, rather than becoming a no-op.
+  const dir = join(dirname(DOCX), "custom-store");
+  const out = run(["--kind", "log", "--budget", "300", "--store", dir], { input: "y".repeat(5000) });
+  assert.match(out, /retained as id/);
+  assert.ok(existsSync(dir), "the named directory should have been created and used");
 });
